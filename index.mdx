@@ -1,133 +1,79 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
-icon: 'star'
+title: 概览
+description: 硬件厂商将智能终端接入 WhalesBot 的官方对接说明：控制台准备、HTTP 设备绑定与语音 WebSocket 协议。
+icon: "cube"
 ---
 
-## Setting up
+## 本文档的用途
 
-Get your documentation site up and running in minutes.
+本文档面向 **硬件厂商、嵌入式 / 固件工程师及产线工具开发者**，说明如何把自有设备接到 **WhalesBot AI** 平台：在 **鲸鱼 AI 智控平台** 完成应用与设备准备后，通过 **manager-api** 完成密钥签发与激活，再通过 **WebSocket** 连接语音服务，实现握手、上行音频与下行合成等实时交互。
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
+阅读并按章节顺序落地后，你可独立完成：**工厂签发 DeviceSecret → 设备激活（含按需用户绑定）→ OTA 获取连接参数 → 建立语音会话**。**设备绑定**一章补充了 **OTA 请求体字段**、**HTTP/OTA 错误形态**、**强制绑定与 `userUuid`**、**环境与 `factoryToken`**；**设备连接**与 **WebSocket 消息协议** 补充 **Header 鉴权**、**二进制音频与重连**。文档聚焦 **对接契约与推荐流程**，不涉及智控台界面逐步截图（以控制台实际菜单为准）。
 
-## Make it yours
+<Note>
+  本文档 **仅覆盖「设备接入」**：匿名 HTTP 绑定接口与语音网关 WebSocket 协议。**不包含**开放云的 Chat / TTS / ASR HTTP API 等能力与计费说明；若后续产品线扩展，将以独立章节或站点另行发布。
+</Note>
 
-Design a docs site that looks great and empowers your users.
+---
 
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+WhalesBot 为 OEM 固件与产线工具提供 **两条主线流程**：**设备绑定**（HTTP）→ **设备连接**（建连与二进制音频）；交互用的 **文本 JSON** 见 **[WebSocket 消息协议](/websocket-protocol)**，便于第三方抓包对账。
+
+## 接入路径
+
+<CardGroup cols={2}>
+  <Card title="设备绑定" icon="link" href="/device-binding">
+    产线下发：**签发 DeviceSecret**、**激活**设备、调用 **OTA** 获取连接参数（`websocket.url`、可选 `iotToken`）。
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="设备连接" icon="bolt" href="/device-connection">
+    使用设备标识与可选 Bearer token 建立 **WebSocket**，在 `hello` 握手后交换 JSON 控制帧与二进制音频。
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
-  </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
-  </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+<CardGroup cols={1}>
+  <Card title="WebSocket 消息协议" icon="code" href="/websocket-protocol">
+    文本帧 **JSON** 格式约定、`hello` / `listen` / `stt` / `tts` 等示例与联调顺序 — 供抓包与对账。
+  </Card>
+</CardGroup>
 
-Everything you need to create world-class documentation.
+## 智控台环境地址
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+开发拼接跳转链接、配置客户端「打开控制台」等场景时，使用与当前业务环境一致的 **Base URL**（路径前不要再重复拼接域名）：
 
-## Make your content agent ready
+| 环境 | 智控台 Base URL |
+|------|----------------|
+| **测试** | `https://test-whalesbotai-console.whalesbot.com/` |
+| **生产** | `https://prod-whalesbotai-console.whalesbot.com/` |
 
-Make your docs work for humans and AI agents alike.
+示例：在测试环境打开智控台某功能页时，使用 **测试环境 Base URL** 作为 origin，再拼接该环境前端的路由路径（pathname / hash 以智控台实际工程为准）。
 
-<Columns cols={2}>
-  <Card
-    title="Prompt component"
-    icon="robot"
-    href="/agent-ready/prompt"
-  >
-    Embed shareable AI prompts readers can copy or open in Cursor.
-  </Card>
-  <Card
-    title="Visibility"
-    icon="eye"
-    href="/agent-ready/visibility"
-  >
-    Show different content to humans and agents reading your docs.
-  </Card>
-  <Card
-    title="Contextual menu"
-    icon="bolt"
-    href="/agent-ready/contextual"
-  >
-    Give readers one-click access to Claude, ChatGPT, Cursor, and more.
-  </Card>
-  <Card
-    title="AI coding tools"
-    icon="wand-magic-sparkles"
-    href="/ai-tools/claude-code"
-  >
-    Set up Claude Code, Cursor, or Windsurf with Mintlify's skill.
-  </Card>
-</Columns>
+<Note>
+  **manager-api**（设备匿名接口）、**OTA 返回的语音 WebSocket** 等域名由运维与集群配置下发，**不一定**与上表域名相同；设备 HTTP/OTA 请以对接邮件与环境说明为准，勿直接把智控台域名当作 API Host。
+</Note>
 
-## Need inspiration?
+## 前置条件
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+- **控制台**：创建**应用**（`productId`）、录入设备；**ProductSecret** 取自智控台 **应用中心 → 我的应用 → 修改应用** 页中的 **应用 Secret**（与文档字段同名对应）。用于工厂签名时请按贵司安全策略保管，勿写入可向用户导出的固件明文。
+- **Base URL**：下文 HTTP 路径均相对于已部署的 **manager-api** 源站（若网关挂在 `/whalesbotai` 等前缀下，请自行拼接）。环境划分见上表及 [设备绑定](/device-binding) 中的「部署环境与访问地址」。
+
+## 端到端时序
+
+```mermaid
+sequenceDiagram
+    participant Factory as 产线/设备
+    participant API as Manager API
+    participant WS as 语音服务
+
+    Factory->>API: POST /device/secret
+    API-->>Factory: deviceSecret、websocketUrl 提示
+    Factory->>API: POST /device/activate
+    API-->>Factory: 已激活
+    Factory->>API: POST /ota/
+    API-->>Factory: websocket.url、可选 iotToken
+    Factory->>WS: WebSocket + device-id、product-id、token
+    Factory->>WS: hello JSON
+    WS-->>Factory: hello + session_id
+```
+
+<Tip>
+  若应用启用**强制用户绑定**，激活时必须携带 `userUuid`；在此模式下 OTA 会拒绝**未绑定用户**的设备。
+</Tip>

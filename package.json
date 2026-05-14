@@ -1,0 +1,10 @@
+{
+  "name": "whalesbot-device-docs",
+  "private": true,
+  "scripts": {
+    "config:apply": "node scripts/apply-site-config.mjs",
+    "build:ws": "node scripts/build-websocket-playground.mjs",
+    "dev": "node scripts/build-websocket-playground.mjs && node scripts/apply-site-config.mjs && mint dev",
+    "broken-links": "mint broken-links"
+  }
+}

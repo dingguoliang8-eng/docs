@@ -1,33 +1,30 @@
-> **First-time setup**: Customize this file for your project. Prompt the user to customize this file for their project.
-> For Mintlify product knowledge (components, configuration, writing standards),
-> install the Mintlify skill: `npx skills add https://mintlify.com/docs`
+> For Mintlify components and global settings, install: `npx skills add https://mintlify.com/docs`
 
-# Documentation project instructions
+# WhalesBot AI 设备接入 — 文档说明
 
-## About this project
+## 项目
 
-- This is a documentation site built on [Mintlify](https://mintlify.com)
-- Pages are MDX files with YAML frontmatter
-- Configuration lives in `docs.json`
-- Run `mint dev` to preview locally
-- Run `mint broken-links` to check links
+- 产品：**WhalesBot AI 设备接入**（OEM 硬件对接）
+- 技术栈：[Mintlify](https://mintlify.com)，MDX + YAML frontmatter
+- **仅使用 `docs.json` 配置**（勿使用已废弃的 `mint.json`）
+- 本地预览：`npm run dev`（会先执行 `config:apply` 注入控制台 URL），或直接 `mint dev`
+- **控制台链接**：由 **`site-config.json`** + 环境变量 **`DOCS_ENV`**（`test` | `production`）经 **`scripts/apply-site-config.mjs`** 写入 `docs.json` → `navbar.primary.href`。发布生产文档前在 CI 设置 `DOCS_ENV=production` 再 `npm run config:apply`
+- 链接检查：`mint broken-links`
 
-## Terminology
+## 信息架构
 
-{/* Add product-specific terms and preferred usage */}
-{/* Example: Use "workspace" not "project", "member" not "user" */}
+- **概览**：`index`
+- **设备接入**：`device-binding`（HTTP）、`device-connection`（建连与帧类型概述）、`websocket-protocol`（文本 JSON 示例与联调顺序）
 
-## Style preferences
+全文为简体中文；协议字段名、JSON 示例中的 key 保持与实现对齐（英文 snake_case / 小写）。
 
-{/* Add any project-specific style rules below */}
+## 写作约定
 
-- Use active voice and second person ("you")
-- Keep sentences concise — one idea per sentence
-- Use sentence case for headings
-- Bold for UI elements: Click **Settings**
-- Code formatting for file names, commands, paths, and code references
+- 标题与正文用简洁的技术中文
+- 适当使用 `<Tip>`、`<Warning>`、`<CardGroup>` 提升可读性
 
-## Content boundaries
+## 修改检查清单
 
-{/* Define what should and shouldn't be documented */}
-{/* Example: Don't document internal admin features */}
+- [ ] MDX 含 `title`、`description`
+- [ ] 新页面已写入 `docs.json` → `navigation`
+- [ ] 站内链接使用根路径且无扩展名，例如 `/device-binding`

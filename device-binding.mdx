@@ -1,0 +1,293 @@
+---
+title: 设备绑定
+description: 产线签发密钥、设备激活与 OTA — WebSocket 连接前的 HTTP 接口说明。
+icon: "link"
+---
+
+绑定流程使用 **manager-api** 上的匿名 HTTP 接口（无需控制台登录 Cookie）。工厂环节使用 **ProductSecret** 签名；激活与 OTA 使用 **DeviceSecret** 签名。
+
+## 术语
+
+| 名称 | 含义 |
+|------|------|
+| `productId` | 应用 ID（与 `ai_app.id` / 设备 `product_id` 一致）。 |
+| `deviceId` | 设备主键（与 `ai_device.id` 一致）。 |
+| `ProductSecret` | 应用密钥，与智控台 **应用 Secret** 为同一值 — **仅**用于 `POST /device/secret` 的工厂签名（勿写入设备长期存储，按安全规范防护）。见下「来源」。 |
+| `DeviceSecret` | `/device/secret` 返回的 64 位小写 hex（32 字节随机数）；用于激活与 OTA 的 HMAC。 |
+| `iotToken` | OTA 可选返回；语音服务开启鉴权时用于 WebSocket 的 `authorization`。 |
+
+### ProductSecret 来源（智控台）
+
+在 **鲸鱼 AI 智控平台** 中：**应用中心 → 我的应用** → 打开目标应用的 **修改应用** 页面。页内只读的 **应用 Secret** 即对接文档中的 **ProductSecret**；同页的 **应用 ID** 即请求体中的 `productId`。仅平台侧有权限的账号可查看与复制，产线或签名服务在受控环境中使用，不可下发到可公开导出的固件包。
+
+## 部署环境与访问地址
+
+### 智控台（浏览器）Base URL
+
+与 **[概览](/)** 页「智控台环境地址」表格一致，便于在 App / 文档 / 扫码页中拼接「打开智控台」链接：
+
+| 环境 | Base URL |
+|------|----------|
+| **测试** | `https://test-whalesbotai-console.whalesbot.com/` |
+| **生产** | `https://prod-whalesbotai-console.whalesbot.com/` |
+
+### API 与语音服务
+
+- **manager-api 根 URL**：由运维或商务对接提供；控制台若展示「数据中心」，请使用与该环境一致的 API 域名，勿混用不同环境的 `productId` / 设备数据。智控台域名 **不等于** manager-api 域名，拼接 `/device/secret` 等接口时请只用运维下发的 API Host。
+- **网关前缀**：文档中的路径均为相对路径；若入口网关挂载为 `/whalesbotai` 等，请在 **API 根地址** 后追加此前缀，再拼接 `/device/...`、`/ota/`。
+- **语音服务地址**：不在本文写死域名；设备应以 **OTA 成功响应** 中的 `websocket` 配置为准（见下文）。
+
+## 强制绑定与 `userUuid`
+
+当应用在智控台开启 **「激活时是否强制绑定用户」** 时，`POST /device/activate` **必须**携带 `userUuid`，且须与平台侧已存在的 **用户唯一标识** 一致。
+
+典型流程由业务方设计，例如：终端用户在 **App / 小程序** 登录账号并完成「添加设备」后，平台建立 **用户–设备** 关系；此时取得的 `userUuid` 与激活请求中传入的一致。若仅在控制台录入设备、终端从未完成绑定，则 OTA 阶段可能因「未绑定用户」校验失败。
+
+具体账号体系与 UUID 格式以贵司与平台集成约定为准；联调前请在智控台确认设备已归属目标用户（若强制绑定）。
+
+## 建议 HTTP 头
+
+设备侧请求（尤其 OTA）建议携带：
+
+| Header | 值 |
+|--------|-----|
+| `Device-Id` | 与 JSON body 中 `deviceId` 一致。 |
+| `Client-Id` | 固件或工具标识（便于排障）。 |
+| `Content-Type` | `application/json` |
+
+---
+
+## 签发设备密钥
+
+```http
+POST /device/secret
+```
+
+若设备记录不存在则创建，并返回 **DeviceSecret**；已存在则返回已有信息（幂等）。
+
+### 请求体
+
+| 字段 | 类型 | 必填 | 说明 |
+|-------|------|------|------|
+| `productId` | string | 是 | 应用 ID。 |
+| `deviceId` | string | 是 | 设备 ID。 |
+| `mac` | string | 是 | MAC 地址字符串。 |
+| `nonce` | string | 是 | 防重放随机串。 |
+| `timestamp` | number | 是 | 请求时间戳（DTO 校验）；**工厂签名载荷不含该字段**，见下文。 |
+| `factorySign` | string | 是 | HMAC 结果（hex 或 Base64）。 |
+
+### 工厂签名 factorySign
+
+- **载荷（UTF-8）：** 拼接 `productId` + `deviceId` + `nonce`，中间无额外分隔符。
+- **算法：** `HMAC-SHA256`，密钥为 **ProductSecret** 的 UTF-8 字节。
+- **编码：** 服务端接受 **64 字符 hex** 或 **Base64**（常量时间比较）。
+
+### 响应（成功要点）
+
+| 字段 | 说明 |
+|-------|------|
+| `deviceSecret` | 64 位小写 hex — 设备侧安全保存。 |
+| `factoryToken` | 短时工厂通讯 token（如 `factory.{token}`），约 48 小时有效，见下表。 |
+| `factoryTokenExpireAt` | `factoryToken` 过期时间（毫秒时间戳，若有）。 |
+| `websocketUrl` | 平台侧配置的语音入口提示（多条时可能用 `;` 分隔）。 |
+
+### `factoryToken` 与 `websocketUrl` 怎么用
+
+| 项 | 说明 |
+|----|------|
+| **长期运行** | 设备端应保存 **OTA** 返回的 `websocket.url` 与 `iotToken`（若开启鉴权），作为日常联网对话的依据；**不要**把 `factoryToken` 当作永久凭证写入量产镜像。 |
+| **factoryToken** | 适用于产线联调、返厂诊断等**短时**场景；过期后需重新走签发流程或通过 OTA 获取连接参数。 |
+| **websocketUrl** | 与 OTA 内 `websocket.url` 同源配置，便于在拿到 DeviceSecret 后做一次连通性验证；**仍以每次 OTA 响应为准** 更新本地保存的 URL。 |
+
+---
+
+## 激活设备
+
+```http
+POST /device/activate
+```
+
+将设备从**待激活**更新为**已激活**。若应用要求**强制绑定用户**，须传 `userUuid`。
+
+### 请求体
+
+| 字段 | 类型 | 必填 | 说明 |
+|-------|------|------|------|
+| `productId` | string | 是 | 须与设备表一致。 |
+| `deviceId` | string | 是 | 设备 ID。 |
+| `nonce` | string | 是 | 防重放。 |
+| `timestamp` | number | 是 | 参与签名的十进制时间戳字符串拼接。 |
+| `signature` | string | 是 | 64 位小写 hex 的 HMAC-SHA256（见下）。 |
+| `userUuid` | string | 强制绑定时必填 | 业务用户 UUID。 |
+
+### 设备签名（激活与 OTA 相同）
+
+- **载荷（UTF-8）：** `productId` + `deviceId` + `nonce` + `timestamp` 的十进制字符串。
+- **密钥：** **DeviceSecret** hex 字符串（小写）的 UTF-8 字节。
+- **输出：** **64 位小写 hex**。
+
+<Warning>
+  **强制绑定**应用若省略 `userUuid` 会导致激活失败。**已激活**设备可能再次调用时返回业务上的成功提示而不重复改库。
+</Warning>
+
+---
+
+## OTA 上报
+
+```http
+POST /ota/
+```
+
+签名方式与激活一致。返回服务端时间、可选固件升级列表、语音与 MQTT 连接参数等。
+
+### 前置条件
+
+- 设备须**先完成激活**，否则校验无法通过。
+- 若应用为**强制绑定**，设备须已在平台侧**绑定用户**，否则服务端在校验阶段会拒绝。
+
+<Warning>
+  OTA 接口在部分失败场景下，HTTP 响应体中的 `error` 字段可能被统一为 **「签名验证失败」** 等概要文案。若现象与签名算法不符，请同步核对：**是否已激活**、**强制绑定下是否已绑定用户**、**DeviceSecret 是否与库中一致**、**时间戳拼接是否与签名代码一致**。
+</Warning>
+
+### 请求体（签名字段，必填）
+
+| 字段 | 类型 | 说明 |
+|-------|------|------|
+| `productId` | string | 应用 ID。 |
+| `deviceId` | string | 设备 ID。 |
+| `nonce` | string | 防重放随机串。 |
+| `timestamp` | number | Unix 毫秒或秒级时间戳（与后端约定一致）；参与签名时为十进制字符串拼接。 |
+| `signature` | string | 与激活相同的 HMAC-SHA256，64 位小写 hex。 |
+
+### 请求体（设备与固件信息，可选）
+
+下列字段按实际上报能力选填，均为厂商自定义的设备画像；JSON 中部分字段为 **snake_case**（与接口 DTO 一致）。
+
+| 字段 | 说明 |
+|------|------|
+| `version` | 板级固件版本号（整数）。 |
+| `flash_size` | 闪存大小（字节）。 |
+| `minimum_free_heap_size` | 最小空闲堆（字节）。 |
+| `mac_address` | MAC 字符串。 |
+| `uuid` | 设备侧 UUID。 |
+| `chip_model_name` | 芯片型号名称。 |
+| `chip_info` | 对象：`model`、`cores`、`revision`、`features` 等。 |
+| `application` | 对象：应用名、`version`、`compile_time`、`idf_version`、`elf_sha256` 等。 |
+| `partition_table` | 分区表数组：`label`、`type`、`subtype`、`address`、`size`。 |
+| `ota` | 当前 OTA 分区信息：`label`。 |
+| `board` | 板级与网络：`type`、`ssid`、`rssi`、`channel`、`ip`、`mac`。 |
+| `firmwares` | 数组：每项含 `type`（固件类型）、`version`（当前版本），用于比对升级包。 |
+
+### 最小请求示例（仅签名字段）
+
+仅用于连通性验证；产线环境建议至少上报 `firmwares` 或与升级相关的 `type`/`version`。
+
+```json
+{
+  "productId": "bd1d144173cf4e02bec7521fdf732f19",
+  "deviceId": "dev_001",
+  "nonce": "ota_nonce_001",
+  "timestamp": 1710000000456,
+  "signature": "<64_hex_lowercase>"
+}
+```
+
+### 带固件信息的示例
+
+```json
+{
+  "productId": "bd1d144173cf4e02bec7521fdf732f19",
+  "deviceId": "dev_001",
+  "nonce": "ota_nonce_002",
+  "timestamp": 1710000000789,
+  "signature": "<64_hex_lowercase>",
+  "mac_address": "AA:BB:CC:DD:EE:FF",
+  "firmwares": [
+    { "type": "app", "version": "1.2.3" }
+  ]
+}
+```
+
+### 响应结构说明
+
+- HTTP **200**，`Content-Type: application/json`。
+- **成功**：根级常见字段包括 `server_time`、`websocket`、`iotToken`（智控台开启鉴权时可能非空）、`firmwares`、`mqtt`（若平台配置）等。
+- **失败**：根级存在 **`error`** 字符串；此时不应使用 `websocket` 作为有效连接信息。
+
+连接语音服务所需的嵌套结构示例：
+
+```json
+{
+  "server_time": {
+    "timestamp": 1710000000000,
+    "timeZone": "Asia/Shanghai",
+    "timezone_offset": 480
+  },
+  "websocket": {
+    "url": "wss://voice.example.com/ws"
+  },
+  "iotToken": "eyJ...",
+  "firmwares": []
+}
+```
+
+设备拼接 WSS 时取 **`websocket.url`**（即 JSON 对象 `websocket` 下的 `url` 字段）。根级 **`iotToken`** 用于 Bearer 鉴权，用法见 [设备连接](/device-connection)。
+
+### 智控台参数与 `iotToken`
+
+当智控台系统参数中 **`server.auth_enabled`**（或等价开关）为 **true** 时，OTA 成功响应会生成并返回 **`iotToken`**；为 **false** 时可能返回空字符串。是否与语音网关强制校验一致，还取决于 **whalesbotai-server** 侧 `server.auth.enabled` 与白名单配置，见 [设备连接](/device-connection)。
+
+---
+
+## HTTP 响应格式（`/device/secret` 与 `/device/activate`）
+
+上述两个接口使用统一 **`Result`** 包装（非 OTA）：
+
+| 字段 | 说明 |
+|------|------|
+| `code` | **0** 表示成功；非 0 为失败（具体取值以后端错误码为准）。 |
+| `msg` | 人类可读说明。 |
+| `data` | 成功时的业务体：如 `deviceSecret`、`factoryToken` 等。 |
+
+失败时根据 `code` / `msg` 排查参数校验、签名校验与业务规则（如强制绑定缺 `userUuid`）。
+
+---
+
+## 示例
+
+**`POST /device/secret`**
+
+```json
+{
+  "productId": "app_001",
+  "deviceId": "dev_001",
+  "mac": "AA:BB:CC:DD:EE:FF",
+  "nonce": "rnd_factory_001",
+  "timestamp": 1710000000123,
+  "factorySign": "<hmac_hex_or_base64>"
+}
+```
+
+**`POST /device/activate`**
+
+```json
+{
+  "productId": "app_001",
+  "deviceId": "dev_001",
+  "nonce": "rnd_activate_002",
+  "timestamp": 1710000000456,
+  "signature": "<64_hex_lowercase>",
+  "userUuid": "usr_123"
+}
+```
+
+---
+
+## 故障排查
+
+| 现象 | 可能原因 |
+|------|----------|
+| 工厂签名校验失败 | ProductSecret 错误；载荷不是 `productId` + `deviceId` + `nonce`。 |
+| 激活缺字段 | 强制绑定未传 `userUuid`。 |
+| OTA 签名失败 | 未激活；DeviceSecret 与库不一致；时间戳拼接与代码不一致。 |
+| OTA 提示未绑定 | 强制绑定应用下未完成用户与设备关系。 |

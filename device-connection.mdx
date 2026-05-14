@@ -1,0 +1,136 @@
+---
+title: 设备连接
+description: 拼接 WebSocket URL、鉴权，以及与语音服务交换 JSON 与二进制音频。
+icon: "bolt"
+---
+
+在 **OTA** 成功响应中读取 **`websocket.url`**（JSON 内为嵌套对象：`websocket.url`）及根级 **`iotToken`**（若开启签发），向语音服务发起 **安全 WebSocket（wss）**。身份与令牌可通过 **Query** 或 **Header** 传递；服务端在握手阶段读取 **`device-id`**、**`product-id`** 以及可选的 **`authorization`**。
+
+第三方联调时除建连外，须对照 **文本帧 JSON**（`type` 及各字段）。完整示例见 **[WebSocket 消息协议](/websocket-protocol)**。
+
+## 连接 URL（Query 拼参）
+
+1. 解析 OTA 响应中的 **`websocket.url`**（即字段路径 `websocket.url`）。
+2. 若根级存在非空的 **`iotToken`**，为 Query 追加 **`authorization`**：
+   - 取值：`Bearer <token>`；若 token 已含 `Bearer ` 前缀则原样使用。
+3. 追加身份参数：
+   - `device-id=<deviceId>`
+   - `product-id=<productId>`
+
+示例（演示用）：
+
+```text
+wss://voice.example.com/x/y?device-id=dev_001&product-id=app_001&authorization=Bearer%20<iotToken>
+```
+
+## 使用 Header 传递（等价写法）
+
+不宜把 Token 写在 URL 日志中的客户端，可在握手请求上使用 HTTP Header（与服务端实现一致即可）：
+
+| Header | 示例值 |
+|--------|--------|
+| `device-id` | 与设备 ID 一致 |
+| `product-id` | 与应用 ID 一致 |
+| `Authorization` | `Bearer <iotToken>` |
+
+Query 与 Header **二选一或同时存在**时，以实现为准；须保证服务端最终能读到上述三者。
+
+## 鉴权与设备白名单（whalesbotai-server）
+
+当语音服务配置 **`server.auth.enabled = true`** 时，默认要求携带合法 **Bearer Token**（通常即 OTA 返回的 `iotToken`）。若配置了 **`server.auth.allowed_devices`**（设备 ID 列表），名单内的 **`device-id`** 可走 **免 Token** 放行，便于产线或固定设备调试。
+
+- 鉴权失败时，连接可能被关闭并下发明文 **`认证失败`**（以实现为准）。
+- **`iotToken`** 是否在 OTA 中出现，取决于智控台 **`server.auth_enabled`** 等参数是否与签发逻辑联动；两端需与运维配置对齐。
+
+详见仓库实现：`core/websocket_server.py`（`_handle_auth`）。
+
+## 传输类型
+
+| 帧类型 | 用途 |
+|--------|------|
+| **文本** | UTF-8 JSON；根对象须包含字符串字段 `type`。 |
+| **二进制** | 麦克风上行与 TTS 下行的 **Opus** 音频（裸帧/流式路径，非 JSON）。 |
+
+## 会话流程
+
+1. 携带 `device-id`、`product-id` 及按需的 token 建立 WebSocket。
+2. 发送 **`hello`**，等待服务端 **`hello`** 中的 **`session_id`**。
+3. 语音交互：按服务端约定发送 **`listen`** 状态与二进制音频。
+4. 处理 **`stt`**、**`tts`** 与二进制播放；用 **`abort`** 打断。
+
+### 最小语音闭环
+
+1. `listen` + `state: start` → 持续发送 **Opus 二进制**上行 → `listen` + `state: stop`。
+2. 接收 **`stt`**（文本），随后 **`tts`** 生命周期事件与 **二进制** 音频直至 **`tts` stop**。
+3. 发送 **`abort`** 取消播放或合成。
+
+---
+
+## 客户端 → 服务端（`type`）
+
+| `type` | 用途 | 说明 |
+|--------|------|------|
+| `hello` | 握手；上报音频参数与能力 | `audio_params`（`format`、`sample_rate`、`channels`、`frame_duration` 等）、可选 `features`（如 `{ "mcp": true }`），设备标识建议与 HTTP 一致。 |
+| `listen` | 语音通道控制 | `state`：`start` / `stop` / `detect`；可选 `mode`（如 `manual`）。 |
+| `abort` | 打断 TTS/流水线 | 可有 `reason`。 |
+| `mcp` | MCP JSON-RPC | `payload` 承载工具协议消息。 |
+| `reading` | 绘本子协议 | 信封：`action`、`session_id`、`reading_session_id`、`request_id`、`ts`、`payload`。 |
+| `iot` | IoT 描述与状态 | `descriptors`、`states`。 |
+| `camera` | 摄像头工具回传 | 字段随已部署插件而定。 |
+| `ping` | 心跳 | 仅当服务端开启 websocket ping 时回复 `pong`。 |
+
+<Tip>
+  若服务端判定未完成激活/绑定，可能设置 **`need_bind`** 并丢弃普通语音 — 请先完成 [设备绑定](/device-binding)。
+</Tip>
+
+---
+
+## 服务端 → 客户端（`type`）
+
+| `type` | 用途 |
+|--------|------|
+| `hello` | 握手响应 — 含 **`session_id`**、协商后的 `audio_params`、版本/传输元数据。 |
+| `stt` | 识别文本（如 `text`、`session_id`）。 |
+| `tts` | 合成生命周期：`state` 如 `start`、`sentence_start`、`timestamp`、`stop`；可带片段 `text`。 |
+| `mcp` | 下行工具 RPC（`payload` 内含 `jsonrpc`、`method` 等）。 |
+| `reading` | 绘本流程（`PAGE_RESOURCE_RESPONSE`、`COMMAND` 等）。 |
+| `llm` | 轻量提示（表情/情绪），非完整对话流。 |
+| `server` | 控制面通知（`status`、`message` 等）。 |
+| `pong` | 心跳响应（功能开启时）。 |
+| `order` | 助理输出约定触发时的设备侧指令。 |
+
+---
+
+## `hello` 示例
+
+```json
+{
+  "type": "hello",
+  "device_id": "dev_001",
+  "device_name": "OEM Speaker",
+  "device_mac": "AA:BB:CC:DD:EE:FF",
+  "audio_params": {
+    "format": "opus",
+    "sample_rate": 16000,
+    "channels": 1,
+    "frame_duration": 60
+  },
+  "features": {
+    "mcp": true
+  }
+}
+```
+
+当 **`features.mcp`** 为 true 时，服务端可能在握手后异步下发 MCP **`initialize`**。
+
+---
+
+## 故障排查
+
+| 现象 | 可能原因 |
+|------|----------|
+| 连接立即断开 | 鉴权开启时 token 无效或缺失；`device-id` / `product-id` 错误。 |
+| 收到明文「认证失败」后断开 | Bearer 无效或未随 Header 传入；不在 `allowed_devices` 白名单且未带 Token。 |
+| 无声音 | 上下行 Opus 参数与协商的 `audio_params` 不一致；二进制非 Opus。 |
+| `ping` 无响应 | 服务端未开启 websocket ping — 属预期。 |
+| 语音被丢弃 | 绑定未完成（`need_bind`）— 按应用策略完成激活与用户绑定；可能伴随下行 **`server`** 提示。 |

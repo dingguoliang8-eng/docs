@@ -1,33 +1,23 @@
 ---
-title: 'Introduction'
-description: 'Example section for showcasing API endpoints'
+title: HTTP API 说明
+description: manager-api 设备侧匿名接口与 OpenAPI 入口
 ---
 
-<Note>
-  If you're not looking to build API reference documentation, you can delete
-  this section by removing the api-reference folder.
-</Note>
+本标签页由 **OpenAPI** 自动生成接口文档与 Playground（若配置了可请求的 `servers` 地址）。
 
-## Welcome
+## 基础地址
 
-There are two ways to build API documentation: [OpenAPI](https://mintlify.com/docs/api-playground/openapi/setup) and [MDX components](https://mintlify.com/docs/api-playground/mdx/configuration). For the starter kit, we are using the following OpenAPI specification.
+- **manager-api** 的实际 Base URL 由部署决定，可能包含网关统一前缀；请将 OpenAPI 中的 `servers` 替换或覆盖为你的环境地址。
+- **智控台（配置 ProductSecret、查看应用）**  
+  - 测试环境：[test-whalesbotai-console.whalesbot.com](https://test-whalesbotai-console.whalesbot.com/)  
+  - 生产环境：[prod-whalesbotai-console.whalesbot.com](https://prod-whalesbotai-console.whalesbot.com/)
 
-<Card
-  title="Plant Store Endpoints"
-  icon="leaf"
-  href="https://github.com/mintlify/starter/blob/main/api-reference/openapi.json"
->
-  View the OpenAPI specification file
-</Card>
+## 与本站文档的关系
 
-## Authentication
+- 签名算法、字段含义、业务流程详见 **[设备绑定](/device-binding)**。
+- 联网与业务会话参见 **[设备连接](/device-connection)**、**[WebSocket 消息协议](/websocket-protocol)**。
+- 浏览器内试连 WSS 文本帧（不含 Opus 二进制）见 **[WebSocket 联调台](/websocket-playground)**。
 
-All API endpoints are authenticated using Bearer tokens and picked up from the specification file.
+## 规范文件
 
-```json
-"security": [
-  {
-    "bearerAuth": []
-  }
-]
-```
+仓库内规范路径：`api-reference/openapi.json`（构建后也可通过站点路径下载，便于对接方导入 Postman / Insomnia）。

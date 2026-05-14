@@ -1,0 +1,11 @@
+{
+  "environments": {
+    "test": {
+      "consoleUrl": "https://test-whalesbotai-console.whalesbot.com/"
+    },
+    "production": {
+      "consoleUrl": "https://prod-whalesbotai-console.whalesbot.com/"
+    }
+  },
+  "defaultEnvironment": "test"
+}

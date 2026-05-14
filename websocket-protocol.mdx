@@ -1,0 +1,233 @@
+---
+title: WebSocket 消息协议
+description: 文本帧 JSON 约定、上下行 type 与联调示例 — 供第三方抓包与对账。
+icon: "code"
+---
+
+所有 **文本帧** 均为 **UTF-8 编码的单个 JSON 对象**，根级必须包含字符串字段 **`type`**，服务端按 `type` 路由到不同处理器。  
+**二进制帧** 与文本帧独立：上行一般为麦克风 **Opus** 裸帧；下行一般为 **TTS Opus**，均非 JSON。
+
+下文示例可直接用于日志对比与单元测试；实际字段可能随部署略有增减，以握手后服务端下发的 **`hello`** 与 **`audio_params`** 为准。
+
+<Note>
+  请先完成 [设备绑定](/device-binding)，并参照 [设备连接](/device-connection) 拼好 **WSS URL** 与鉴权后再对照本节调试 JSON。若需在浏览器内试连文本帧，可使用 [WebSocket 联调台](/websocket-playground)。
+</Note>
+
+---
+
+## 文本帧通用约定
+
+| 约定 | 说明 |
+|------|------|
+| 编码 | UTF-8 JSON，一层对象，勿嵌套多层 envelope（除非某 `type` 另有说明，如 `mcp` / `reading`）。 |
+| `type` | 必填，字符串，区分大小写（均为小写）。 |
+| `session_id` | 服务端在握手响应的 **`hello`** 中下发；后续多数下行消息会携带，便于与会话对齐。 |
+| 与二进制的关系 | 语音上下行在 **`listen` 会话段**内通过二进制帧传输；JSON 只负责控制面（握手、开始/结束采集、TTS 状态等）。 |
+
+---
+
+## 上行（设备 → 服务端）
+
+### `hello`（握手）
+
+建立连接后**首先发送**，等待下行同名 `hello` 再开始业务。
+
+```json
+{
+  "type": "hello",
+  "device_id": "dev_001",
+  "device_name": "OEM Speaker",
+  "device_mac": "AA:BB:CC:DD:EE:FF",
+  "audio_params": {
+    "format": "opus",
+    "sample_rate": 16000,
+    "channels": 1,
+    "frame_duration": 60
+  },
+  "features": {
+    "mcp": true
+  }
+}
+```
+
+### `listen`（开始 / 结束采集）
+
+开始说话前发 `start`，随后发送 **二进制 Opus** 上行；结束本轮发 `stop`。
+
+```json
+{
+  "type": "listen",
+  "state": "start",
+  "mode": "manual"
+}
+```
+
+```json
+{
+  "type": "listen",
+  "state": "stop"
+}
+```
+
+`state` 还可能为 `detect`（带屏或唤醒场景可附带 `text` 等，依部署而定）。
+
+### `abort`（打断）
+
+打断当前 TTS 或生成流水线。
+
+```json
+{
+  "type": "abort",
+  "reason": "user_interrupt"
+}
+```
+
+### `ping`（心跳）
+
+仅当服务端开启 WebSocket ping 能力时，可能对下行 **`pong`** 有响应。
+
+```json
+{
+  "type": "ping"
+}
+```
+
+### 其他 `type`（扩展）
+
+| `type` | 载荷要点 |
+|--------|-----------|
+| `mcp` | `payload` 内为 JSON-RPC（如 `initialize`、`tools/list` 响应等）。 |
+| `reading` | 绘本子协议：信封字段 `action`、`session_id`、`reading_session_id`、`request_id`、`ts`、`payload`。 |
+| `iot` | `descriptors`、`states`。 |
+| `camera` | 拍照/视觉插件回传，字段随插件版本而定。 |
+
+---
+
+## 下行（服务端 → 设备）
+
+### `hello`（握手响应）
+
+含 **`session_id`**，后续消息常带回同一会话标识（字段名以实际报文为准）。
+
+```json
+{
+  "type": "hello",
+  "session_id": "sess_abc123",
+  "audio_params": {
+    "format": "opus",
+    "sample_rate": 16000,
+    "channels": 1,
+    "frame_duration": 60
+  },
+  "version": "1.x",
+  "transport": "websocket"
+}
+```
+
+### `stt`（识别结果）
+
+```json
+{
+  "type": "stt",
+  "text": "用户说的话",
+  "session_id": "sess_abc123"
+}
+```
+
+### `tts`（合成生命周期）
+
+常见 `state` 包括 `start`、`sentence_start`、`timestamp`、`stop`；`sentence_start` 可带本句文本提示。
+
+```json
+{
+  "type": "tts",
+  "state": "start",
+  "session_id": "sess_abc123"
+}
+```
+
+```json
+{
+  "type": "tts",
+  "state": "sentence_start",
+  "text": "这是一句要播的内容",
+  "session_id": "sess_abc123"
+}
+```
+
+```json
+{
+  "type": "tts",
+  "state": "stop",
+  "session_id": "sess_abc123"
+}
+```
+
+此阶段服务端通常会下发 **二进制 Opus** 音频，设备按 negotiated `audio_params` 播放。
+
+### `pong`（心跳应答）
+
+在服务端启用 ping/pong 时出现。
+
+```json
+{
+  "type": "pong",
+  "timestamp": 1710000000000
+}
+```
+
+### `server`（控制面）
+
+状态或提示信息，字段依实现而定。
+
+```json
+{
+  "type": "server",
+  "status": "info",
+  "message": "optional human readable"
+}
+```
+
+### 其他 `type`
+
+| `type` | 说明 |
+|--------|------|
+| `mcp` | 下行工具调用：`payload` 内含 `jsonrpc`、`method`（如 `tools/call`）。 |
+| `reading` | 绘本业务：`PAGE_RESOURCE_RESPONSE`、`COMMAND` 等。 |
+| `llm` | 情绪/提示类短文本，非完整对话流。 |
+| `order` | 设备指令扩展（与助理输出约定相关）。 |
+
+---
+
+## 二进制 Opus 与 `audio_params`
+
+- 麦克风上行与 TTS 下行一般为 **裸 Opus 帧**（非容器封装），具体分包大小与节奏须与握手 **`audio_params`** 一致（常见字段：`format`、`sample_rate`、`channels`、`frame_duration` 毫秒等）。  
+- 上行时应尽量 **均匀按时发送** 帧，便于服务端 VAD/ASR 对齐；下行播放应按协商采样率与声道解码。  
+- 若修改采集参数，请先重新发送 **`hello`** 或通过协商流程与服务端达成一致再送音频。
+
+## 重连与 `session_id`
+
+WebSocket **断线重连** 后，旧连接的 **`session_id` 不再延续**。请重新执行：**建连 → 上行 `hello` → 等待下行 `hello` → 记录新的 `session_id`**，再开始 `listen` 与二进制传输。
+
+---
+
+## 联调时可对照的最小顺序（文本 + 二进制）
+
+1. **上行** `hello` → **下行** `hello`（记录 `session_id`）。  
+2. **上行** `listen` `start` → 连续发送若干 **二进制 Opus**（麦克风）→ **上行** `listen` `stop`。  
+3. **下行** `stt` → **下行** `tts`（`start` → 可选 `sentence_start` → 中间 **二进制** → `stop`）。  
+4. 需要打断时 **上行** `abort`。
+
+抓包时区分：**JSON 为文本帧**，**Opus 为二进制帧**；同一连接内交替出现属正常现象。
+
+---
+
+## 故障排查（协议侧）
+
+| 现象 | 排查 |
+|------|------|
+| 解析 JSON 失败 | 确认文本帧为合法 UTF-8 JSON，且根对象含 `type`。 |
+| 收不到 `stt` / `tts` | 是否已握手拿到 `session_id`；`listen` 是否已 `start` 并实际上传了二进制音频。 |
+| 仅有文本无声音 | 下行 `tts` 与二进制是否成对出现；采样率/帧长是否与 `audio_params` 一致。 |
+
+更多网络与鉴权问题见 [设备连接](/device-connection) 文末表格。

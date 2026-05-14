@@ -1,0 +1,10 @@
+/* 隐藏页脚社交图标与 Mintlify 署名（配置移除 footer 后仍可能出现的 branding） */
+#footer {
+  display: none !important;
+}
+
+/* 隐藏顶部文档搜索框（Search… / Ctrl K） */
+#search-bar-entry,
+#search-bar-entry-mobile {
+  display: none !important;
+}
