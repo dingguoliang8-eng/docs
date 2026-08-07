@@ -4,8 +4,36 @@ sidebarTitle: "RAG 流水线"
 description: "生产级 RAG：混合检索、cross-encoder 重排与自动化评估。"
 ---
 
-## RAG 流水线
+这是一套面向企业文档问答的生产 RAG：语料大约 **50 万\+** 文档，准确率和可引用是硬指标——知识库胡编比不答更糟。
 
-企业文档问答的生产级 RAG 系统。
+## 约束
 
-> 中文正文将逐步完善；可通过右上角语言切换查看完整英文版。
+- 规模大：PDF / Word / Markdown / HTML 混杂
+- 质量：答案要有来源
+- 中英双语（甚至同文档混用）
+- P95 端到端目标约 **5 秒内**
+
+## 流水线
+
+**离线索引：** Unstructured 解析 → RecursiveCharacterTextSplitter（512 / overlap 64）→ BGE-M3（dense \+ sparse）→ Qdrant hybrid collection。
+
+**在线：** 查询改写（GPT-4o-mini）→ 混合检索 RRF top-20 → BGE 重排 top-5 → 组装上下文 → GPT-4o 带引用生成。
+
+选 BGE-M3，主要因为中英表现和一次出 dense/sparse。查询改写是提升最大的单点优化之一。
+
+## 评估
+
+先和领域专家做了约 **200** 组标注问答，再写检索代码。指标：Hit Rate@5、MRR、Faithfulness、Answer Relevance；RAGAs \+ 周回归。
+
+在该评估集上，相对朴素 RAG，加了重排和查询改写后，Hit Rate@5 从约 71% 提到约 **89%**。
+
+## 教训
+
+- 分块策略常常比换 Embedding 模型更关键
+- 查询改写 ROI 很高
+- 中文技术词更依赖 sparse \+ 重排
+- 没评估就换更大模型，很容易白花钱
+
+<Tip>
+  评估集尽量用真实用户问法，别只靠合成题。
+</Tip>
