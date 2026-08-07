@@ -3,5 +3,228 @@ title: "Production RAG Pipeline: Enterprise Document Q&A System"
 sidebarTitle: "RAG Pipeline"
 description: "A production RAG pipeline with hybrid retrieval, cross-encoder reranking, and automated evaluation serving enterprise document Q&A at scale."
 ---
+This project is a production document Q&A system I built for an enterprise client with 500K+ documents — reliability and answer quality were non-negotiable. The client's employees needed accurate answers with source citations, and a hallucinated answer from a knowledge base is worse than no answer at all. That constraint drove every architectural decision.
 
-Placeholder — content will be written next.
+## Problem Statement
+
+<CardGroup cols={2}>
+  <Card title="Scale" icon="layer-group" href="#problem-statement">
+    **500K+ documents** spanning PDFs, Word files, Markdown, and HTML — accumulated over a decade of operations across multiple business units.
+  </Card>
+  <Card title="Quality Bar" icon="bullseye" href="#problem-statement">
+    Users needed **accurate answers with cited sources**. Hallucination was a critical failure mode that would destroy trust in the system within days of launch.
+  </Card>
+  <Card title="Multilingual" icon="language" href="#problem-statement">
+    Documents and queries arrive in both **Chinese and English** — sometimes mixed within the same document. The embedding model had to handle both languages natively.
+  </Card>
+  <Card title="Latency" icon="gauge" href="#problem-statement">
+    End-to-end query latency target: **under 5 seconds** for 95th percentile queries. Users had been patient with slow search tools; they wouldn't be patient with a slow AI assistant.
+  </Card>
+</CardGroup>
+
+## Pipeline Architecture
+
+The pipeline has two phases: **indexing** (offline, runs on document upload or update) and **retrieval + generation** (online, runs on every query). Keeping these phases cleanly separated made it possible to re-index with improved embedding models without touching the query path.
+
+```text Full RAG Pipeline
+Documents
+  │
+  ├─► Document Loader (LangChain Unstructured)
+  │
+  ├─► Chunker (RecursiveCharacterTextSplitter, chunk=512, overlap=64)
+  │
+  ├─► Embedding (BGE-M3: dense + sparse + colbert)
+  │
+  └─► Qdrant (hybrid collection with dense + sparse vectors)
+
+Query
+  │
+  ├─► Query Rewriting (GPT-4o-mini)
+  │
+  ├─► Hybrid Retrieval (dense + BM25, RRF fusion, top-20)
+  │
+  ├─► BGE Reranker (cross-encoder, top-5)
+  │
+  ├─► Context Assembly (with source metadata)
+  │
+  └─► GPT-4o Generation (with citations)
+```
+
+### Indexing Pipeline
+
+<Steps>
+  <Step title="Document Loading">
+    Used LangChain's Unstructured integration to parse PDFs, Word documents, HTML, and Markdown into clean text. Unstructured handles layout-aware extraction for PDFs — tables and headers are preserved rather than mangled by naive text extraction.
+  </Step>
+  <Step title="Chunking">
+    `RecursiveCharacterTextSplitter` with `chunk_size=512` tokens and `chunk_overlap=64`. After testing chunk sizes from 256 to 1024, 512 gave the best tradeoff between retrieval precision and context coverage. Each chunk retains its source document ID, page number, and section heading as metadata.
+  </Step>
+  <Step title="Embedding with BGE-M3">
+    Each chunk is embedded with BGE-M3 to produce dense vectors (1024-dim) and sparse vectors (lexical weights). Both vector types are stored in a single Qdrant collection with hybrid index support.
+  </Step>
+  <Step title="Qdrant Upsert">
+    Chunks are upserted to Qdrant in batches of 100. Idempotent upserts mean re-indexing a document is safe — existing vectors are overwritten by document ID rather than duplicated.
+  </Step>
+</Steps>
+
+## Why BGE-M3 for Embeddings
+
+I evaluated several embedding models before settling on BGE-M3. The key differentiators were multilingual coverage and the ability to generate dense and sparse vectors from a single model pass.
+
+<CardGroup cols={2}>
+  <Card title="Single Model, Three Vector Types" icon="cubes" href="#why-bge-m3-for-embeddings">
+    BGE-M3 produces dense embeddings, sparse lexical weights, and ColBERT multi-vector representations in one forward pass. I use dense + sparse for production and skip ColBERT to keep storage costs reasonable.
+  </Card>
+  <Card title="Strong Multilingual Performance" icon="earth-asia" href="#why-bge-m3-for-embeddings">
+    BGE-M3 is trained on 100+ languages with particular strength in Chinese and English — exactly the language pair this client needed. No separate models, no translation step.
+  </Card>
+</CardGroup>
+
+```python BGE-M3 Initialization and Encoding
+from FlagEmbedding import BGEM3FlagModel
+
+model = BGEM3FlagModel('BAAI/bge-m3', use_fp16=True)
+
+# Returns dense, sparse, and colbert vectors
+output = model.encode(
+    ["your document text"],
+    batch_size=12,
+    max_length=512,
+    return_dense=True,
+    return_sparse=True,
+    return_colbert_vecs=False  # Skip ColBERT for storage efficiency
+)
+
+dense_vectors = output["dense_vecs"]      # shape: (n, 1024)
+sparse_vectors = output["lexical_weights"] # dict of token_id -> weight
+```
+
+### Hybrid Retrieval with Qdrant
+
+<CodeGroup>
+```python Qdrant Collection Setup
+from qdrant_client import QdrantClient
+from qdrant_client.models import (
+    VectorParams, SparseVectorParams, Distance
+)
+
+client = QdrantClient(url=QDRANT_URL)
+
+client.create_collection(
+    collection_name="enterprise_docs",
+    vectors_config={
+        "dense": VectorParams(size=1024, distance=Distance.COSINE)
+    },
+    sparse_vectors_config={
+        "sparse": SparseVectorParams()
+    }
+)
+```
+
+```python Hybrid Query
+from qdrant_client.models import (
+    SparseVector, Prefetch, Fusion
+)
+
+results = client.query_points(
+    collection_name="enterprise_docs",
+    prefetch=[
+        Prefetch(
+            query=dense_query_vector,
+            using="dense",
+            limit=20
+        ),
+        Prefetch(
+            query=SparseVector(
+                indices=sparse_indices,
+                values=sparse_values
+            ),
+            using="sparse",
+            limit=20
+        )
+    ],
+    query=Fusion.RRF,  # Reciprocal Rank Fusion
+    limit=20
+)
+```
+</CodeGroup>
+
+### Query Rewriting
+
+Before retrieval, I rewrite the user's query using GPT-4o-mini. This step gave the single largest quality improvement of any optimization I made.
+
+```python Query Rewriter
+from langchain_openai import ChatOpenAI
+from langchain_core.prompts import ChatPromptTemplate
+
+rewrite_prompt = ChatPromptTemplate.from_messages([
+    ("system", """You are a query optimization assistant. Rewrite the user's question \
+to maximize retrieval recall from a document search index. \
+- Expand abbreviations and acronyms
+- Add relevant synonyms and related terms
+- If the query is in Chinese, keep it in Chinese
+- Return only the rewritten query, no explanation"""),
+    ("human", "{query}")
+])
+
+rewriter = rewrite_prompt | ChatOpenAI(model="gpt-4o-mini", temperature=0)
+
+async def rewrite_query(query: str) -> str:
+    result = await rewriter.ainvoke({"query": query})
+    return result.content
+```
+
+## Evaluation Framework
+
+I built the evaluation framework before writing a single line of retrieval code. This was the right call — it forced me to define what "good" meant concretely and caught several regressions early.
+
+<Steps>
+  <Step title="Build the Evaluation Dataset">
+    I worked with the client's domain experts to create **200 question-answer pairs** from representative documents. Each pair includes the question, the expected answer, and the source document IDs that should be retrieved.
+  </Step>
+  <Step title="Define Metrics">
+    Four metrics tracked for every pipeline configuration: **Hit Rate@5** (is the right document in the top 5?), **MRR** (how highly ranked is the best result?), **Faithfulness** (does the answer stay grounded in retrieved context?), and **Answer Relevance** (does the answer address the question?)
+  </Step>
+  <Step title="Automate with RAGAs">
+    RAGAs provides LLM-as-judge scoring for Faithfulness and Answer Relevance, automated against the eval dataset on a weekly schedule. Retrieval metrics (Hit Rate, MRR) are computed deterministically from the labeled source document IDs.
+  </Step>
+  <Step title="Weekly Regression Runs">
+    A CI workflow runs the full eval suite every Monday. If any metric drops more than 2 percentage points from the previous week's baseline, the run fails and I get alerted before any user notices degradation.
+  </Step>
+</Steps>
+
+### Evaluation Results
+
+The numbers below are from the evaluation dataset of 200 labeled question-answer pairs. They represent measured performance on that dataset, not a universal benchmark.
+
+| Metric | Naive RAG | With Reranking | With Query Rewrite |
+|--------|-----------|----------------|---------------------|
+| Hit Rate@5 | 71% | 84% | **89%** |
+| MRR | 0.61 | 0.77 | **0.82** |
+| Faithfulness | 0.73 | 0.81 | **0.85** |
+| Answer Relevance | 0.69 | 0.78 | **0.83** |
+
+<Note>
+  "Naive RAG" here means single-vector dense retrieval with no reranking and the raw user query passed directly to the retriever. It's a reasonable starting point — but it's the floor, not the ceiling.
+</Note>
+
+## Key Engineering Lessons
+
+<AccordionGroup>
+  <Accordion title="Chunking Strategy Matters More Than Embedding Model Choice" icon="scissors">
+    I spent a week benchmarking embedding models before I realized my chunking strategy was the bottleneck. Switching from 1024-token chunks to 512-token chunks with 64-token overlap improved Hit Rate@5 by 8 percentage points — more than any model swap. Now I tune chunking first.
+  </Accordion>
+  <Accordion title="Query Rewriting Gave the Biggest Quality Improvement" icon="pen-to-square">
+    Of all the optimizations I tried — better embeddings, larger top-k, more sophisticated fusion — query rewriting had the highest ROI. A 2-second GPT-4o-mini call that expands the query and adds synonyms improved Hit Rate@5 by 5 points and MRR by 0.05. It costs almost nothing and the impact is immediate.
+  </Accordion>
+  <Accordion title="Reranking Was Essential for Chinese Queries" icon="language">
+    Dense retrieval with cosine similarity struggled with Chinese technical terms that don't appear in the embedding model's most frequent training tokens. The sparse (lexical) channel caught exact term matches that the dense channel missed, and the cross-encoder reranker correctly elevated them. Without reranking, Chinese query quality was noticeably worse than English.
+  </Accordion>
+  <Accordion title="Evaluation Before Optimization Prevented Wasted Effort" icon="flask">
+    I had a hunch that switching to a larger embedding model (1536-dim vs 1024-dim) would improve quality. The eval suite showed it improved Hit Rate@5 by 1 point and increased indexing time by 40% and memory usage by 50%. I didn't make the switch. Intuition without measurement is expensive.
+  </Accordion>
+</AccordionGroup>
+
+<Tip>
+  Build your RAG evaluation dataset from real user queries, not synthetic ones. Synthetic queries test the distribution your LLM imagines users have — real queries test the distribution users actually have. They're often surprisingly different.
+</Tip>

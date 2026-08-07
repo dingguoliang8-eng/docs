@@ -1,0 +1,146 @@
+---
+title: "RAG 工程：构建可靠的检索增强系统"
+sidebarTitle: "概览"
+description: "检索增强生成端到端指南：索引流水线、检索策略、重排与 grounded 生成。"
+---
+检索增强生成（RAG）在推理时把外部知识喂给大语言模型。模型不再只靠训练时记住的内容，而是从你自己的数据里取回相关文档当上下文——幻觉更少、能做领域问答，答案也能落到可核对的材料上。
+
+## RAG 流水线怎么走
+
+两条线：**索引**（一次性或周期性离线）和**查询**（每次用户请求都要跑的在线路径）。
+
+<Steps>
+  <Step title="索引阶段">
+    原始文档被加载、切成块、转为向量嵌入，并连同元数据存入向量数据库。
+
+    ```text
+    Documents → Chunker → Embedding Model → Vector Store
+    ```
+  </Step>
+  <Step title="查询阶段">
+    用户查询用同一模型嵌入，用于检索最相关的块，可选地重排以提高精度，再与原始问题一起交给 LLM，合成 grounded 回答。
+
+    ```text
+    Query → Embedding Model → Retriever → Reranker → LLM → Answer
+    ```
+  </Step>
+</Steps>
+
+把两个阶段合在一起，完整数据流如下：
+
+```text
+                        ┌─────────────────────────────────────┐
+  INDEXING              │                                     │
+  ─────────             │  Document                           │
+  Raw Docs              │     └─► Chunker                     │
+     └─► Chunker        │            └─► Embedding Model      │
+            └─► Embed   │                     └─► Vector Store│
+                  └─► Store                                   │
+                        └─────────────────────────────────────┘
+
+                        ┌─────────────────────────────────────┐
+  QUERYING              │                                     │
+  ────────              │  User Query                         │
+  User Query            │     └─► Embedding Model             │
+     └─► Embed          │            └─► Retriever            │
+            └─► Retrieve│                  └─► Reranker       │
+                   └─► Rerank                    └─► LLM      │
+                          └─► LLM                     └─► Answer
+                                └─► Answer            │       │
+                        └─────────────────────────────────────┘
+```
+
+<Note>
+  RAG 系统质量首先受限于分块，其次是嵌入，再次是检索策略——甚至在 LLM 登场之前。请在索引流水线上重投入。
+</Note>
+
+### LangChain 中的基础 RAG 流水线
+
+下面示例把 OpenAI embeddings、Qdrant 向量库与 GPT-4o 串成可用的 RAG chain：
+
+```python title="basic_rag.py"
+from langchain_openai import OpenAIEmbeddings, ChatOpenAI
+from langchain_community.vectorstores import Qdrant
+from langchain.chains import RetrievalQA
+
+# Indexing
+embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
+vectorstore = Qdrant.from_documents(
+    documents=docs,
+    embedding=embeddings,
+    url="http://localhost:6333",
+    collection_name="knowledge_base"
+)
+
+# Retrieval + Generation
+llm = ChatOpenAI(model="gpt-4o")
+qa_chain = RetrievalQA.from_chain_type(
+    llm=llm,
+    retriever=vectorstore.as_retriever(search_kwargs={"k": 5})
+)
+result = qa_chain.invoke({"query": "What is our return policy?"})
+```
+
+## 何时使用 RAG
+
+只要应用需要基于特定知识语料回答问题——尤其该语料会随时间变化——RAG 就是合适选择。
+
+<CardGroup cols={2}>
+  <Card title="知识库" icon="book-open">
+    内部 wiki、政策文档与 SOP，员工可用自然语言查询，不必通读数百页。
+  </Card>
+
+  <Card title="文档问答" icon="file-magnifying-glass">
+    法律合同、研究论文、技术手册——让用户提问并获得带直接引用的答案。
+  </Card>
+
+  <Card title="客户支持" icon="headset">
+    用产品文档与工单历史 grounding 支持机器人，减少幻觉回复。
+  </Card>
+
+  <Card title="企业搜索" icon="magnifying-glass">
+    用统一的语义检索与生成层，替代跨异构数据源的关键词搜索。
+  </Card>
+</CardGroup>
+
+## RAG vs 微调
+
+RAG 与微调都能让基座 LLM 适配你的需求，但解决的是不同问题。选错是 AI 工程中最常见的错误之一。
+
+| 维度 | RAG | 微调 |
+| --- | --- | --- |
+| **知识更新** | ✅ 更新索引即可，无需重训 | ❌ 需要新的训练运行 |
+| **Grounding / 引用** | ✅ 来源显式可审计 | ❌ 知识隐式在权重中 |
+| **所需数据量** | ✅ 任意语料规模都可用 | ❌ 需要高质量标注样本 |
+| **延迟** | ⚠️ 增加检索开销 | ✅ 单次推理调用 |
+| **风格 / 语气控制** | ⚠️ 依赖提示工程 | ✅ 可直接微调到目标风格 |
+| **行为改变** | ⚠️ 难以改基座行为 | ✅ 适合能力或格式变更 |
+| **成本** | ✅ 无训练成本 | ❌ 训练算力昂贵 |
+
+<Info>
+  实践中，优秀的生产系统常两者结合：用微调管风格与指令遵循，再用 RAG 做领域事实 grounding。它们互补，而非互斥。
+</Info>
+
+**选 RAG，当**知识库很大、频繁更新，或需要透明引用与可审计性。
+
+**选微调，当**需要改变模型行为或输出格式，或延迟极关键且无法接受检索开销。
+
+## 探索完整 RAG 栈
+
+<CardGroup cols={2}>
+  <Card title="Embeddings" icon="vector-square" href="/rag/embeddings">
+    选型与优化嵌入模型。对比 OpenAI、Cohere、BGE、E5。掌握分块策略与向量库配置。
+  </Card>
+
+  <Card title="检索与重排" icon="filter" href="/rag/retrieval-reranking">
+    实现混合检索、MMR 多样性与 cross-encoder 重排，最大化检索精度。
+  </Card>
+
+  <Card title="进阶模式" icon="diagram-project" href="/rag/advanced-patterns">
+    HyDE、父子检索、Self-RAG、Corrective RAG 与多向量索引等生产模式。
+  </Card>
+
+  <Card title="AI Agents" icon="robot" href="/agents/overview">
+    把 RAG 与工具调用 Agent 结合，构建能跨多步检索、推理与行动的系统。
+  </Card>
+</CardGroup>

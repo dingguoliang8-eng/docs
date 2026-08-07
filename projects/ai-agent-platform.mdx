@@ -1,0 +1,36 @@
+---
+title: "AI Agent 平台：多智能体任务执行系统"
+sidebarTitle: "Agent 平台"
+description: "多智能体任务执行平台的设计与实现：自主工作流、工具使用与人工审批。"
+---
+这是一个通用多智能体任务平台：用户用自然语言描述任务，supervisor 把子任务分给专家 Agent。动机很直接——很多人想做复杂调研/分析，但不想自己拼工具链。
+
+## 问题与做法
+
+- **问题：** 多步调研、摘要、抽取、写报告，手工串工具又慢又易错
+- **做法：** GPT-4o supervisor \+ 领域 worker；高风险动作前加人审（`interrupt_before`）
+
+测试中可支撑大约 **50–100 并发任务**；任务状态存在 PostgreSQL，审批中断后可恢复。
+
+## 架构
+
+Hub-and-spoke：supervisor 只做路由和汇总，不直接干脏活。专家包括 Web Search、Data Analyst、Code Executor、Doc Generator，各自工具集和提示不同。
+
+整体是 `StateGraph`：条件边由 supervisor 的结构化路由决定；专家跑完都回到 supervisor。生产 checkpointer 用 Postgres；代码执行节点前强制审批。
+
+前端用 SSE 看中间步骤，不必等整任务结束。
+
+## 踩过的坑
+
+- **上下文膨胀：** 消息超过阈值就做结构化摘要再丢旧消息
+- **来回踢皮球：** `max_iterations` 硬限制，到顶就总结收尾
+- **难调试：** 从第一天接 LangSmith，按任务看整棵图
+- **异步审批：** 暂停的 `thread_id` 入库；用户点批准后再 `invoke(None, config)` 续跑
+
+## 结果（测试口径）
+
+约 92% 任务无需人工介入能跑完；复杂调研从小时级压到约 4–7 分钟；简单任务 P95 约 8 秒，多步常见 45–90 秒。
+
+<Tip>
+  用 LangGraph 做多智能体，尽早接上 tracing，别等出了事故再补。
+</Tip>

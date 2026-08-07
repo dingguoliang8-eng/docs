@@ -1,0 +1,56 @@
+---
+title: "RAG 嵌入模型：选型与优化"
+sidebarTitle: "Embeddings"
+description: "对比 RAG 用嵌入模型：OpenAI、Cohere 与开源 BGE/E5，以及分块策略与向量存储。"
+---
+Embedding 是 RAG 的地基。一段文本被编码成高维向量后，才能在毫秒级和大量文档比相似度。**检索质量的上限，首先由 Embedding 模型决定**——提示词和重排救不回「一开始就没检索到」的上下文。
+
+## 怎么选 Embedding 模型
+
+没有万能最优解，看语言覆盖、上下文长度、是否自托管、预算。
+
+| 模型 | 维度 | 上下文 | 特点 |
+| --- | --- | --- | --- |
+| `text-embedding-3-small` | 1536 | 8191 | 英文性价比高，OpenAI API 好接 |
+| `text-embedding-3-large` | 3072 | 8191 | OpenAI 质量更高 |
+| `embed-v3` (Cohere) | 1024 | 512 | 多语言强；文档/查询用不同 input type |
+| `BGE-M3` | 1024 | 8192 | 开源；dense / sparse / ColBERT 可一起 |
+| `E5-large-v2` | 1024 | 512 | 英文不错，可自托管，要加 instruction 前缀 |
+| `jina-embeddings-v3` | 1024 | 8192 | 长上下文；可按任务挂 LoRA |
+
+<Tip>
+  英文项目多数从 `text-embedding-3-small` 开始就够。需要长上下文或想砍掉 API 成本时，再上 `BGE-M3` / `jina-embeddings-v3`。
+</Tip>
+
+## 分块策略
+
+很多时候**分块比换 Embedding 模型还管用**。块太大，向量被「平均掉」；块太小，检索到的碎片不够 LLM 生成。
+
+常用做法：
+
+- **定长**：简单可预期，适合格式规整的文本
+- **递归字符切分（默认推荐）**：优先按段落、句子边界切
+- **语义分块**：相邻句相似度掉下去再切开，适合长文多主题
+- **按文档结构**：尊重 Markdown 标题、代码块、表格
+
+<Note>
+  `chunk_overlap` 建议设为 chunk\_size 的 10–15%。没有 overlap，卡在边界上的句子容易丢语义。
+</Note>
+
+## 向量库
+
+- **Qdrant**：生产常用，吞吐高，过滤和混合检索友好
+- **Chroma**：本地开发省事，高并发生产慎用
+- **Pinecone**：托管省运维，按量和查询计费
+- **pgvector**：已有 PostgreSQL 时少引入一套系统
+
+## 实践建议
+
+1. E5 / BGE 这类模型：查询和文档用各自的 instruction 前缀，漏了会 silently 掉质量
+2. 文档向量要缓存；只对变更文档重嵌
+3. 做 cosine 时尽量归一化向量
+4. 换 Embedding 模型后旧向量不可混用——集合要版本化，必要时全量重建
+
+<Warning>
+  不同模型的向量不要塞进同一个 collection。几何空间不同，相似度没有意义。
+</Warning>

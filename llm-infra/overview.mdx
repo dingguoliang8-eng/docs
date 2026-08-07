@@ -1,0 +1,180 @@
+---
+title: "LLM 基础设施：语言模型服务与扩展"
+sidebarTitle: "概览"
+description: "LLM 基础设施决策概览：托管 API vs 自建推理、模型选型、成本优化与可观测性。"
+---
+基础设施怎么选，会直接卡住成本、延迟和质量。多模型路由、上下文管理、要不要自托管——早期决策往往就是系统上限。
+
+## 托管 API 还是自托管
+
+这是第一个分叉。没有标准答案，看约束。
+
+<CardGroup cols={2}>
+  <Card title="托管 API" icon="cloud">
+    **提供商：** OpenAI、Anthropic、Google Vertex AI
+
+    - 最快上线路径——无需自管基础设施
+    - 第一天即可使用最新前沿模型
+    - 随需求自动扩展
+    - **权衡：** 数据离开你的基础设施、高流量时昂贵、定制有限、受提供商限流约束
+  </Card>
+
+  <Card title="自托管推理" icon="server">
+    **工具：** vLLM、Ollama、Text Generation Inference (TGI)
+
+    - 完全控制数据——留在 VPC 或本地
+    - 规模化后显著降本（为算力付费，而非按 Token）
+    - 可按流量模式调优服务参数
+    - **权衡：** 运维开销、GPU 采购、模型管理、可靠性由你的团队负责
+  </Card>
+</CardGroup>
+
+### 决策框架
+
+可用此清单指导决策：
+
+- **数据敏感度** — 是否涉及 PII、PHI 或机密 IP？合规常要求自托管或私有云部署。
+- **规模** — 低请求量时，算上工程时间，托管 API 几乎总是更便宜。超过一定 Token 量后，自托管 GPU 在单位经济上更优。
+- **延迟要求** — 托管 API 有网络往返开销。与应用同网的自托管模型可明显更快。
+- **团队能力** — 跑 GPU 推理需要 MLOps 经验。若团队没做过，不要低估运维负担。
+
+<Tip>
+  常见生产模式：早期产品与前沿模型任务用托管 API，高流量、低复杂度工作负载则在自有基础设施上跑开源模型。
+</Tip>
+
+## 模型选型
+
+并非每个任务都需要前沿模型。按任务复杂度匹配模型能力，是成本与延迟优化中杠杆最高的手段之一。
+
+### 前沿模型
+
+| 模型 | 提供商 | 最适合 |
+| --- | --- | --- |
+| GPT-4o | OpenAI | 复杂推理、多模态任务、Agent 工作流 |
+| Claude 3.5 Sonnet | Anthropic | 长上下文分析、编程、细腻指令遵循 |
+| Gemini 1.5 Pro | Google | 超长上下文（1M tokens）、多模态 |
+
+前沿模型在几乎所有基准上质量最好。留给质量直接影响用户结果或业务价值的任务。
+
+### 中档模型
+
+| 模型 | 提供商 | 最适合 |
+| --- | --- | --- |
+| GPT-4o-mini | OpenAI | 大规模分类、抽取、摘要 |
+| Claude 3.5 Haiku | Anthropic | 快速、便宜且指令遵循强的回复 |
+| Gemini 1.5 Flash | Google | 低延迟、高吞吐应用 |
+
+中档模型质量/成本比优秀。许多生产负载在感知输出质量上与前沿模型难分伯仲。
+
+### 开源模型
+
+| 模型 | 参数量 | 最适合 |
+| --- | --- | --- |
+| Llama 3.1 / 3.2 | 3B–405B | 通用、微调、本地部署 |
+| Qwen2.5 | 0.5B–72B | 强多语言与编程表现 |
+| Mistral / Mixtral | 7B–8x22B | 高效推理、欧洲数据驻留 |
+
+开源模型可自托管，并可在你的领域数据上微调。在 70B\+ 规模，许多任务上接近前沿模型质量。
+
+### 专用模型
+
+<CardGroup cols={2}>
+  <Card title="代码生成" icon="code">
+    **DeepSeek Coder V2** 与 **Qwen2.5-Coder** 在补全、调试与测试生成上优于通用模型——编码任务成本远低于 GPT-4o。
+  </Card>
+
+  <Card title="推理" icon="brain">
+    **QwQ-32B** 与 **o1-mini** 擅长多步推理、数学与逻辑问题——链式思考比原始生成速度更重要。
+  </Card>
+</CardGroup>
+
+## 成本优化策略
+
+### 按复杂度路由查询
+
+影响最大的成本优化是：简单任务不要用昂贵模型。分类或关键词抽取不需要 GPT-4o——需要的是能稳定出结果的最便宜模型。
+
+```python title="LLM Router Pattern"
+from openai import OpenAI
+from enum import Enum
+
+client = OpenAI()
+
+class QueryComplexity(str, Enum):
+    SIMPLE = "simple"      # classification, extraction, yes/no
+    MODERATE = "moderate"  # summarization, Q&A, translation
+    COMPLEX = "complex"    # reasoning, code gen, long-form synthesis
+
+MODEL_MAP = {
+    QueryComplexity.SIMPLE: "gpt-4o-mini",
+    QueryComplexity.MODERATE: "gpt-4o-mini",
+    QueryComplexity.COMPLEX: "gpt-4o",
+}
+
+def classify_query(query: str) -> QueryComplexity:
+    """Use a cheap model to decide which model to use."""
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "Classify the complexity of this query as one of: "
+                    "simple, moderate, complex. Reply with only the word."
+                ),
+            },
+            {"role": "user", "content": query},
+        ],
+        temperature=0,
+        max_tokens=10,
+    )
+    label = response.choices[0].message.content.strip().lower()
+    return QueryComplexity(label)
+
+def routed_completion(query: str) -> str:
+    complexity = classify_query(query)
+    model = MODEL_MAP[complexity]
+    print(f"Routing to: {model} (complexity: {complexity})")
+
+    response = client.chat.completions.create(
+        model=model,
+        messages=[{"role": "user", "content": query}],
+        temperature=0.2,
+    )
+    return response.choices[0].message.content
+```
+
+### 缓存 LLM 响应
+
+语义缓存用向量相似度，对语义等价（即便措辞不同）的查询返回缓存响应。对 FAQ 类应用与文档聊天机器人尤其有效。
+
+<Info>
+  **GPTCache** 与 **Qdrant** 等工具让语义缓存易于实现。生产聊天机器人常见 20–30% 命中率，直接转化为成本节约。
+</Info>
+
+### 管理上下文窗口
+
+提示中的每个 Token 都花钱。缩小提示的策略：
+
+- **摘要对话历史**，而非传入完整转录
+- **在 RAG 中只检索最相关块**——不要用额外上下文填充
+- **使用提示压缩工具**（如 LLMLingua），在尽量少损质量的前提下减少 Token
+- **显式设置 `max_tokens`**，避免简单任务生成失控
+
+### 使用流式输出
+
+流式不会降低 Token 成本，但能显著改善感知延迟——首 Token 几乎立刻出现，而不必等完整响应。面向用户的应用几乎总值得实现流式。
+
+---
+
+## 继续探索
+
+<CardGroup cols={2}>
+  <Card title="部署" icon="rocket" href="/llm-infra/deployment">
+    配置生产 GPU 推理用的 vLLM 与本地开发用的 Ollama，以及可观测性与优化建议。
+  </Card>
+
+  <Card title="SaaS 架构" icon="building" href="/llm-infra/saas-architecture">
+    多租户 AI 产品设计模式：租户隔离、按租户 RAG、限流与成本归因。
+  </Card>
+</CardGroup>

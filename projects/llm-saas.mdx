@@ -1,0 +1,37 @@
+---
+title: "LLM SaaS 产品：多租户 AI 聊天平台"
+sidebarTitle: "LLM SaaS"
+description: "多租户 AI SaaS：按租户 RAG、按套餐模型路由、用量统计与流式聊天。"
+---
+这是一个 B2B AI SaaS：企业可部署基于自有文档的品牌助手。**多租户从第一天就是核心**，不是后来补的——库表、向量库、鉴权中间件都按「成百上千租户共享基础设施但仍隔离」来设计。
+
+## 产品形态
+
+- Starter：小模型、有限 Token/文档
+- Pro：更强模型、更高额度
+- Enterprise：可接专用推理（如自建 vLLM）、更高定制
+
+每租户独立知识库、系统提示、配额和品牌聊天入口。数据不混：库、向量、缓存都不混。
+
+## 分层
+
+1. FastAPI \+ 租户解析中间件（JWT → 租户配置，Redis 缓存）
+2. LangGraph Agent（租户 RAG 当工具，Postgres checkpoint）
+3. 每租户独立 Qdrant collection（`tenant_{id}_docs`，集合级隔离）
+4. LiteLLM 统一路由（按套餐选模型，应用层不直接绑厂商）
+5. PostgreSQL \+ Redis \+ Qdrant
+6. Celery 异步入库；完成用 WebSocket 通知
+
+聊天用 SSE 流式输出；注意负载均衡超时和并发连接。
+
+## 入库
+
+直传对象存储 → webhook 入队 → 解析/分块/嵌入/写入租户 collection → 更新状态并通知前端。
+
+## 结果（生产观测口径）
+
+约 200\+ 租户；首 Token P95 约 320ms；索引吞吐约 1000 页/分钟（给定 worker/GPU）；前 6 个月可用性约 99.2%，故障偏基础设施层。
+
+<Tip>
+  租户隔离尽量落在基础设施层（独立 collection/schema），别只靠应用层 filter——一条错查询就能打穿。
+</Tip>
