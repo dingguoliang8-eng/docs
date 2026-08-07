@@ -9,71 +9,150 @@
   },
   "favicon": "/favicon.svg",
   "navigation": {
-    "tabs": [
+    "languages": [
       {
-        "tab": "Portfolio",
-        "groups": [
+        "language": "zh",
+        "default": true,
+        "tabs": [
           {
-            "group": "Introduction",
-            "pages": [
-              "introduction",
-              "about"
+            "tab": "作品集",
+            "groups": [
+              {
+                "group": "简介",
+                "pages": [
+                  "zh/introduction",
+                  "zh/about"
+                ]
+              },
+              {
+                "group": "AI Agents",
+                "pages": [
+                  "zh/agents/overview",
+                  "zh/agents/langgraph",
+                  "zh/agents/multi-agent",
+                  "zh/agents/tool-use"
+                ]
+              },
+              {
+                "group": "RAG 工程",
+                "pages": [
+                  "zh/rag/overview",
+                  "zh/rag/embeddings",
+                  "zh/rag/retrieval-reranking",
+                  "zh/rag/advanced-patterns"
+                ]
+              },
+              {
+                "group": "LLM 基础设施",
+                "pages": [
+                  "zh/llm-infra/overview",
+                  "zh/llm-infra/deployment",
+                  "zh/llm-infra/saas-architecture"
+                ]
+              },
+              {
+                "group": "多模态 AI",
+                "pages": [
+                  "zh/multimodal/overview",
+                  "zh/multimodal/asr-tts",
+                  "zh/multimodal/vision-language"
+                ]
+              }
             ]
           },
           {
-            "group": "AI Agents",
-            "pages": [
-              "agents/overview",
-              "agents/langgraph",
-              "agents/multi-agent",
-              "agents/tool-use"
-            ]
-          },
-          {
-            "group": "RAG Engineering",
-            "pages": [
-              "rag/overview",
-              "rag/embeddings",
-              "rag/retrieval-reranking",
-              "rag/advanced-patterns"
-            ]
-          },
-          {
-            "group": "LLM Infrastructure",
-            "pages": [
-              "llm-infra/overview",
-              "llm-infra/deployment",
-              "llm-infra/saas-architecture"
-            ]
-          },
-          {
-            "group": "Multimodal AI",
-            "pages": [
-              "multimodal/overview",
-              "multimodal/asr-tts",
-              "multimodal/vision-language"
+            "tab": "项目与笔记",
+            "groups": [
+              {
+                "group": "项目",
+                "pages": [
+                  "zh/projects/overview",
+                  "zh/projects/ai-agent-platform",
+                  "zh/projects/rag-pipeline",
+                  "zh/projects/llm-saas"
+                ]
+              },
+              {
+                "group": "工程笔记",
+                "pages": [
+                  "zh/notes/lessons-learned",
+                  "zh/notes/llm-gotchas",
+                  "zh/notes/performance-tips"
+                ]
+              }
             ]
           }
         ]
       },
       {
-        "tab": "Projects & Notes",
-        "groups": [
+        "language": "en",
+        "tabs": [
           {
-            "group": "Projects",
-            "pages": [
-              "projects/overview",
-              "projects/ai-agent-platform",
-              "projects/rag-pipeline",
-              "projects/llm-saas"
+            "tab": "Portfolio",
+            "groups": [
+              {
+                "group": "Introduction",
+                "pages": [
+                  "introduction",
+                  "about"
+                ]
+              },
+              {
+                "group": "AI Agents",
+                "pages": [
+                  "agents/overview",
+                  "agents/langgraph",
+                  "agents/multi-agent",
+                  "agents/tool-use"
+                ]
+              },
+              {
+                "group": "RAG Engineering",
+                "pages": [
+                  "rag/overview",
+                  "rag/embeddings",
+                  "rag/retrieval-reranking",
+                  "rag/advanced-patterns"
+                ]
+              },
+              {
+                "group": "LLM Infrastructure",
+                "pages": [
+                  "llm-infra/overview",
+                  "llm-infra/deployment",
+                  "llm-infra/saas-architecture"
+                ]
+              },
+              {
+                "group": "Multimodal AI",
+                "pages": [
+                  "multimodal/overview",
+                  "multimodal/asr-tts",
+                  "multimodal/vision-language"
+                ]
+              }
             ]
           },
           {
-            "group": "Engineering Notes",
-            "pages": [
-              "notes/lessons-learned",
-              "notes/llm-gotchas",
-              "notes/performance-tips"
+            "tab": "Projects & Notes",
+            "groups": [
+              {
+                "group": "Projects",
+                "pages": [
+                  "projects/overview",
+                  "projects/ai-agent-platform",
+                  "projects/rag-pipeline",
+                  "projects/llm-saas"
+                ]
+              },
+              {
+                "group": "Engineering Notes",
+                "pages": [
+                  "notes/lessons-learned",
+                  "notes/llm-gotchas",
+                  "notes/performance-tips"
+                ]
+              }
             ]
           }
         ]
