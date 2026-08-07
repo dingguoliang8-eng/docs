@@ -1,0 +1,68 @@
+---
+title: "AI Engineering: Building Production-Ready LLM Systems"
+sidebarTitle: "Introduction"
+description: "A structured reference covering AI agents, RAG pipelines, LLM infrastructure, and multimodal systems built for production engineering."
+---
+
+This knowledge base is a structured reference for engineers who build, deploy, and scale production LLM systems. Whether you are an AI engineer designing agent workflows, a backend engineer integrating LLM APIs into a SaaS product, a technical recruiter evaluating depth of experience, or an LLM developer exploring architectural patterns — you will find opinionated, practical content grounded in real project work.
+
+The scope spans the full surface area of modern AI engineering: **AI agent architecture** with LangGraph and multi-agent orchestration, **retrieval-augmented generation (RAG)** pipelines and embedding strategies, **LLM deployment and infrastructure** with vLLM and cloud inference, **ASR/TTS speech AI**, and **multimodal systems** that combine vision, audio, and language. The goal is not to survey every tool — it is to document what actually works in production.
+
+<Note>
+  This site is a living document. Patterns, benchmarks, and architectural recommendations are updated as new models and frameworks mature. Check the changelog for recent additions.
+</Note>
+
+---
+
+## How to Use This Site
+
+The site is organised into two tabs:
+
+<Steps>
+  <Step title="Portfolio Tab">
+    The **Portfolio** tab contains this knowledge base — deep-dives into architecture, system design patterns, and engineering decisions across agents, RAG, LLM infrastructure, and multimodal AI. Start here to understand how systems are built and why specific trade-offs were made.
+  </Step>
+  <Step title="Projects & Notes Tab">
+    The **Projects & Notes** tab contains case studies from real projects, experiment logs, and quick-reference notes. Use it to see how the patterns described in the Portfolio tab play out in practice, including benchmark numbers, failure modes, and lessons learned.
+  </Step>
+</Steps>
+
+<Tip>
+  If you are new to this site, start with the **Agents** or **RAG** overview depending on your immediate focus. Each section is self-contained and cross-links to related topics.
+</Tip>
+
+---
+
+## Core Engineering Philosophy
+
+Four principles guide every system described in this knowledge base:
+
+**1. Production-first thinking** Every architectural decision is evaluated against production constraints first — latency budgets, cost per token, failure modes under load, and observability requirements. Demos and prototypes are useful for exploration, but the bar is always: "would this hold up in production?"
+
+**2. Composable architectures** LLM systems that are hard to extend or swap out become liabilities quickly. Preferring modular, composable designs — separating retrieval from generation, keeping agent logic decoupled from tool implementations — means components can be upgraded independently as the model landscape shifts.
+
+**3. Observability as a first-class concern** Tracing, structured logging, and evaluation harnesses are not afterthoughts. Instrumenting LLM calls, agent steps, and retrieval quality from day one is what separates a system you can improve from one you can only restart.
+
+**4. Iterative improvement over big-bang rewrites** LLM system quality improves through measurement and small, targeted changes. Establishing evaluation baselines early, then iterating on prompts, chunking strategies, retrieval parameters, or model choices, produces compounding gains without regressions.
+
+---
+
+## Explore the Knowledge Base
+
+<CardGroup cols={2}>
+  <Card title="AI Agents & Orchestration" icon="robot" href="/en/agents/overview">
+    LangGraph workflows, multi-agent patterns, tool use, memory architectures, and autonomous agent design.
+  </Card>
+
+  <Card title="RAG Pipelines" icon="database" href="/en/rag/overview">
+    Chunking strategies, embedding models, vector store selection, hybrid search, and retrieval evaluation.
+  </Card>
+
+  <Card title="LLM Infrastructure" icon="server" href="/en/llm-infra/overview">
+    vLLM, Ollama, TGI deployment, model serving patterns, batching, quantisation, and cloud inference.
+  </Card>
+
+  <Card title="Multimodal AI" icon="waveform-lines" href="/en/multimodal/overview">
+    ASR with Whisper, TTS with CosyVoice and FishSpeech, vision-language models, and multimodal pipelines.
+  </Card>
+</CardGroup>
