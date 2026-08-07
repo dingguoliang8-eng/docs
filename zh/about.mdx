@@ -1,92 +1,115 @@
 ---
-title: "关于我：从 AI 应用工程师到 AI Agent 工程师"
+title: "关于我"
 sidebarTitle: "关于我"
-description: "我的背景、做过的系统，以及向 AI Agent / Runtime 工程演进的路径。"
+description: "AI 应用工程师：从 Java 后端到 Agent 系统与 AI Runtime。技术焦点、工程经验与理念。"
 ---
 
-我是一名 AI 应用工程师，正有意识地走向 AI Agent 与 AI Runtime 工程。工作落在应用机器学习与后端系统工程的交汇处——在原始模型能力与用户、业务依赖的生产软件之间构建那一层。这个作品集记录我设计过的系统、验证过的可靠模式，以及正在前进的方向。
+我是一名 **AI 应用工程师（AI Application Engineer）**。工作落在应用型 AI 能力与生产级软件系统的交汇处——构建能用上大语言模型、检索与 Agent 式工作流，并且能走出 Demo、真正可落地的应用。
 
-<Info>
-  本页以第一人称撰写——是真实背景与目标的陈述，而非生成式摘要。若想讨论其中项目或想法，可通过站点页脚的联系方式找到我。
-</Info>
-
----
-
-## 工程背景
-
-我的实战经验覆盖现代 AI 应用开发的核心方向：
-
-**LLM 应用开发** 基于 OpenAI GPT-4 与 Anthropic Claude 系列构建生产应用，处理大规模场景下的提示工程、结构化输出解析、Function Calling 与上下文窗口管理。也深度使用开源模型——Llama、Mistral、Qwen——覆盖微调与直接推理，对闭源与开源权重模型的能力与成本权衡有落地理解。
-
-**RAG 流水线设计与优化** 从零设计并迭代检索增强生成流水线——从文档摄入与分块策略，到嵌入模型选型、向量库索引、混合检索配置与检索评估。清楚朴素 RAG 在生产中何处失效，以及如何用重排、查询变换与上下文压缩应对。
-
-**LangGraph Agent 工作流** 用 LangGraph 构建有状态、多步骤 Agent 工作流，包括工具调用 Agent、反思循环，以及带专用子图节点的多智能体系统。处理过 Agent 可靠性的实际挑战：优雅处理工具失败、管理长时状态、设计人机协同检查点。
-
-**LLM 部署与推理** 用 vLLM 与 Ollama 部署并管理自托管 LLM 推理栈，在不同硬件配置下调吞吐与延迟。也使用过云托管推理端点，理解成本、延迟、控制力与合规等驱动「自托管 vs 托管服务」的运营权衡。
-
-**多租户架构的 AI SaaS 产品** 参与并主导过把租户隔离、用量计量、按租户模型配置作为一等需求的 AI SaaS 产品。这意味着理解 LLM 能力如何与底层 SaaS 平台交互：API 网关、限流、计费钩子与审计日志。
-
-**语音 AI（ASR 与 TTS）** 集成并部署过基于 OpenAI Whisper（含低延迟场景的 faster-whisper 变体）的自动语音识别，以及 CosyVoice、FishSpeech 的文本转语音。构建过端到端语音流水线——音频输入、转写、LLM 处理、合成语音输出——覆盖批处理与流式场景。
+当前方向很明确：在 AI 应用工程之上，深入 **Agent 系统工程（Agent System Engineering）**，长期目标是成为 **AI Runtime Engineer**。本站用来记录我如何思考这些系统、正在构建什么，以及仍在学习什么。
 
 ---
 
-## 技术栈
+## 工程之路
+
+我的路径是渐进的，而非突变：
+
+```text
+Java 后端开发
+  → AI 应用工程
+    → Agent 系统工程
+      → AI Runtime Engineer（长期目标）
+```
+
+我从 **Java 后端开发**起步，可靠性、认证、权限与系统架构是日常议题。这段基础至今仍影响我做 AI 的方式：模型与框架很重要，但租户隔离、访问控制与生产约束同样重要。
+
+作为 **AI 应用工程师**，我关注构建与演进 AI 应用平台——把已有的 AI 能力变成可部署、可共享、可运营的系统。这包括把 AI 助手改造为面向 **SaaS** 的产品，并围绕它设计 **多租户**架构。
+
+向前看，我正走向 **Agent 系统工程**：能规划、使用工具、协调多步任务的系统，而不只是回答单轮提示。更长期，我希望深入 **AI Runtime**——Agent 系统所依赖的执行环境与基础设施。
+
+---
+
+## 技术焦点
+
+当前的技术兴趣可以分成几类：
+
+### LLM 应用
+
+- 生产可用的 LLM 应用
+- 把模型能力落到应用架构中，而不仅仅停留在提示词
+
+### Agent 与检索
+
+- AI Agent 架构
+- RAG 系统
+- Embedding 与重排（reranking）技术
+
+### 基础设施与服务
+
+- LLM 部署与推理基础设施
+- AI SaaS 架构与多租户系统
+
+### 多模态系统
+
+- 多模态 AI 系统
+- ASR 与 TTS 流水线
+- 视觉—语言（vision-language）应用
 
 <CardGroup cols={2}>
-  <Card title="语言" icon="code" href="/zh/llm-infra/overview">
-    **Python** 用于全部 ML 与后端工作。**TypeScript** 用于 API 层、全栈 AI 功能与工具链。
+  <Card title="AI Agents" icon="robot" href="/zh/agents/overview">
+    Agent 架构与编排模式。
   </Card>
 
-  <Card title="框架与编排" icon="layer-group" href="/zh/agents/overview">
-    **LangChain**、**LangGraph**、**FastAPI**。LangGraph 做有状态 Agent 工作流；FastAPI 提供推理 API。
+  <Card title="RAG 系统" icon="database" href="/zh/rag/overview">
+    检索、嵌入与重排。
   </Card>
 
-  <Card title="LLM" icon="brain" href="/zh/llm-infra/overview">
-    **OpenAI GPT-4**、**Claude (Anthropic)**、**Llama**、**Mistral**、**Qwen**——闭源与开源权重。
+  <Card title="LLM 基础设施" icon="server" href="/zh/llm-infra/overview">
+    部署、推理与 SaaS 架构。
   </Card>
 
-  <Card title="向量库" icon="database" href="/zh/rag/overview">
-    **Qdrant**、**Chroma**、**Pinecone**——按规模、过滤需求与部署环境选型。
-  </Card>
-
-  <Card title="推理引擎" icon="microchip" href="/zh/llm-infra/overview">
-    **vLLM**、**Ollama**、**TGI (Text Generation Inference)** 用于自托管模型服务。
-  </Card>
-
-  <Card title="语音 AI" icon="microphone" href="/zh/multimodal/overview">
-    **Whisper**（ASR）、**CosyVoice**、**FishSpeech**（TTS）用于语音流水线。
-  </Card>
-
-  <Card title="云平台" icon="cloud" href="/zh/llm-infra/overview">
-    **AWS**、**GCP**、**Azure**——计算与存储以 AWS 为主，托管 ML 服务多用 GCP。
+  <Card title="多模态 AI" icon="waveform-lines" href="/zh/multimodal/overview">
+    ASR、TTS 与视觉—语言流水线。
   </Card>
 </CardGroup>
 
 ---
 
-## 正在走向哪里
+## 工程经验
 
-目标是从 AI 应用工程走向 **AI Agent 工程**，最终走向 **AI Runtime 工程**。
+相关经验包括：
 
-对我而言，这个区分很重要。AI 应用工程是把模型能力集成进软件产品。Agent 工程是设计能在更长时域中推理、规划并自主行动的系统——能从失败中恢复、协调子 Agent、管理长时状态，并通过工具与 API 与世界交互。AI Runtime 工程再下一层：构建 Agent 系统所依赖的执行环境、调度基础设施与框架。
+- 基于已有 AI 平台开发 AI 应用系统
+- 将 AI 助手改造为面向 SaaS 的系统
+- 设计多租户架构
+- 参与认证、权限与系统架构相关工作
+- 构建 RAG 相关应用
+- 探索多模态 AI 系统，包括 ASR、TTS 与视觉—语言应用
 
-具体而言，我正朝着这些方向努力：
-
-- 设计并部署能在生产环境中处理复杂、开放式任务的**自主多智能体系统**
-- 为**开源 Agent 框架**做贡献——尤其在状态管理、工具执行与 Agent 评估方面
-- 构建并实验超越当前框架能力暴露面的 **Agent Runtime 与编排层**
-- 发展严谨的 **Agent 评估方法**：如何度量在真实世界中行动的系统的能力、可靠性与安全性？
-
-<Tip>
-  「项目与笔记」记录了推动我走向这些目标的实验与半成品探索——包括未奏效的尝试及其原因。
-</Tip>
+贯穿始终的是务实取向：把 AI 能力嵌入真实应用平台，并让周边软件工程——租户、认证与架构——成为一等公民。
 
 ---
 
-## 为什么做这个作品集
+## 工程理念
 
-多数 AI 工程知识散落在 GitHub README、博客与 Discord 里。我建这个知识库，是因为需要一个结构化的地方，沉淀真实项目中学到的东西——架构决策、失败模式、基准数字，以及文档里并不显而易见的权衡理由。
+我做事遵循四条原则：
 
-它也是一种约束装置。把系统写清楚，会逼出比「只是做出来」更强的精确性。如果我无法清楚解释检索流水线为何这样分块，或为何选某种 Agent 图拓扑而非另一种，那我大概还理解得不够深。
+**生产优先于 Demo。** 我关心能被运营、加固与演进的系统，而不只是在 notebook 里好看的原型。
 
-本作品集是活文档。随构建、学习与修正理解而增长。目标不是面面俱到——而是诚实记录我知道什么、如何知道，以及知识边界在哪里。
+**理解底层架构，而不只是会用框架。** 框架能加速交付，但我希望对下层机制有清晰模型：检索、推理、租户隔离与失败模式。
+
+**把 AI 能力与可靠软件工程结合起来。** 认证、权限、多租户设计与系统架构是 AI 产品工作的一部分，而不是旁支。
+
+**持续记录工程认知。** 这个知识库存在，就是为了把工程判断——包括权衡与未决问题——写下来，并可修订。
+
+---
+
+## 当前学习与探索
+
+我正在持续探索：
+
+- Agent 系统，以及如何从单轮助手走向多步、可调用工具的工作流
+- 面向部署与推理的 LLM 基础设施
+- 覆盖 RAG、多模态流水线与面向 SaaS 的 AI 平台等进阶 AI 工程主题
+
+本作品集是把这些学习沉淀为结构化文档的地方。它会随我的工作进一步深入 Agent 系统，并在更长周期里走向 AI Runtime 工程而持续增长。
