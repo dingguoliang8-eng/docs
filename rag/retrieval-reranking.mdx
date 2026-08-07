@@ -1,0 +1,195 @@
+---
+title: "Retrieval and Reranking: Improve RAG Answer Quality"
+sidebarTitle: "Retrieval & Reranking"
+description: "Improve RAG precision with hybrid search, MMR diversity, and cross-encoder reranking. Covers BM25, dense retrieval, Cohere Rerank, and BGE rerankers."
+---
+
+Retrieval quality is the single biggest bottleneck in RAG systems. Even the best LLM cannot synthesize a correct answer from poor context — garbage in, garbage out. The strategies in this guide address the two core failure modes: **not finding the right documents at all** (recall failure) and **drowning the LLM in noisy, redundant, or irrelevant context** (precision failure).
+
+## Retrieval Strategies
+
+No single retrieval method dominates in all scenarios. Understanding the trade-offs lets you choose the right strategy — or combine them — for your use case.
+
+### 1. Dense Retrieval (Vector Similarity)
+
+Embed both the query and each document chunk, then return the chunks whose vectors are nearest to the query vector. Fast, captures semantic similarity ("purchase" matches "buy"), and handles paraphrase well.
+
+**Weakness:** misses exact-match terms — product codes, version numbers, proper nouns, and rare jargon are under-represented in embedding space.
+
+```python title="dense_retrieval.py"
+# Standard dense retrieval via LangChain
+retriever = vectorstore.as_retriever(
+    search_type="similarity",
+    search_kwargs={"k": 20}
+)
+results = retriever.invoke("What changed in version 3.2?")
+```
+
+### 2. Sparse Retrieval (BM25 / Keyword)
+
+BM25 is the classic TF-IDF–based ranking algorithm used by search engines like Elasticsearch. It excels at exact term matches and is language-agnostic.
+
+**Weakness:** completely blind to semantics — "automobile" and "car" are unrelated terms.
+
+```python title="bm25_retrieval.py"
+from langchain_community.retrievers import BM25Retriever
+
+bm25_retriever = BM25Retriever.from_documents(
+    documents=chunks,
+    k=20
+)
+results = bm25_retriever.invoke("error code E-4012")
+```
+
+### 3. Hybrid Retrieval with Reciprocal Rank Fusion
+
+Hybrid search runs both dense and sparse retrieval in parallel, then merges the result lists using **Reciprocal Rank Fusion (RRF)**. RRF rewards documents that rank highly in both lists without requiring score normalization across different scales.
+
+```python title="hybrid_retrieval.py"
+from langchain.retrievers import EnsembleRetriever
+from langchain_community.retrievers import BM25Retriever
+from langchain_community.vectorstores import Qdrant
+
+# Dense retriever
+dense_retriever = vectorstore.as_retriever(search_kwargs={"k": 20})
+
+# Sparse retriever
+bm25_retriever = BM25Retriever.from_documents(chunks, k=20)
+
+# Hybrid with equal weighting (adjust weights to favor one method)
+hybrid_retriever = EnsembleRetriever(
+    retrievers=[bm25_retriever, dense_retriever],
+    weights=[0.4, 0.6]  # Slightly favor dense for semantic queries
+)
+results = hybrid_retriever.invoke("What is the refund policy for digital goods?")
+```
+
+<Tip>
+  Hybrid retrieval almost always outperforms pure dense retrieval on real-world corpora. The sparse component acts as a safety net for exact-match queries that the embedding model handles poorly. Enable it by default in production systems.
+</Tip>
+
+## Reranking
+
+First-stage retrieval (dense, sparse, or hybrid) optimizes for **recall** — fetching a broad set of candidate documents that probably contain the answer. Reranking then optimizes for **precision** — identifying the 3–5 chunks most likely to help the LLM generate a correct response.
+
+A **cross-encoder** reranker reads the query and each candidate document together (as a pair) and scores their relevance. This is far more accurate than bi-encoder similarity but more expensive — which is why you run it only on your top 20–50 candidates, not your entire index.
+
+### Cohere Rerank (Managed API)
+
+```python title="cohere_rerank.py"
+from langchain.retrievers import ContextualCompressionRetriever
+from langchain_cohere import CohereRerank
+
+# First-stage: retrieve 20 candidates
+base_retriever = vectorstore.as_retriever(search_kwargs={"k": 20})
+
+# Rerank to top 3 using Cohere's cross-encoder
+reranker = CohereRerank(model="rerank-english-v3.0", top_n=3)
+
+compression_retriever = ContextualCompressionRetriever(
+    base_compressor=reranker,
+    base_retriever=base_retriever
+)
+results = compression_retriever.invoke("your query here")
+```
+
+### BGE Reranker (Open-Source, Self-Hosted)
+
+```python title="bge_rerank.py"
+from langchain.retrievers import ContextualCompressionRetriever
+from langchain_community.cross_encoders import HuggingFaceCrossEncoder
+from langchain.retrievers.document_compressors import CrossEncoderReranker
+
+# Load BGE reranker locally (GPU recommended for low latency)
+cross_encoder = HuggingFaceCrossEncoder(model_name="BAAI/bge-reranker-v2-m3")
+
+reranker = CrossEncoderReranker(model=cross_encoder, top_n=5)
+
+compression_retriever = ContextualCompressionRetriever(
+    base_compressor=reranker,
+    base_retriever=vectorstore.as_retriever(search_kwargs={"k": 20})
+)
+results = compression_retriever.invoke("your query here")
+```
+
+<Note>
+  Retrieve **more** candidates than you need in the first stage (k=20 is a common default) and let the reranker cut them down to the final 3–5 you send to the LLM. A larger initial candidate pool gives the reranker more to work with.
+</Note>
+
+<Warning>
+  Sending too many chunks to the LLM (10+) degrades answer quality even with a capable model — this is the **"lost in the middle" problem**: LLMs attend strongly to the beginning and end of context but poorly to the middle. Keep your final context window focused: 3–5 high-quality chunks typically outperforms 10+ mediocre ones.
+</Warning>
+
+## MMR: Maximal Marginal Relevance
+
+MMR solves a different problem: **redundancy**. If your top 5 retrieved chunks all come from the same section of the same document, you're wasting your context window with repeated information. MMR penalizes documents that are similar to already-selected documents, balancing relevance against diversity.
+
+```python title="mmr_retrieval.py"
+retriever = vectorstore.as_retriever(
+    search_type="mmr",
+    search_kwargs={
+        "k": 5,            # Final number of documents to return
+        "fetch_k": 20,     # Candidate pool before MMR selection
+        "lambda_mult": 0.5 # 0 = max diversity, 1 = max relevance
+    }
+)
+results = retriever.invoke("How does the billing system work?")
+```
+
+Tune `lambda_mult` based on your use case:
+- Use **0.7–0.9** when you need highly relevant, tightly focused context (e.g., FAQ answering)
+- Use **0.3–0.5** when coverage across a broad topic matters more (e.g., summarization tasks)
+
+## Retrieval Evaluation
+
+You cannot improve what you do not measure. Instrument your retrieval pipeline before optimizing it.
+
+<CardGroup cols={2}>
+  <Card title="Hit Rate / Recall@K" icon="crosshairs">
+    Did the correct document appear anywhere in the top K results? The most fundamental metric — start here.
+  </Card>
+  <Card title="MRR (Mean Reciprocal Rank)" icon="arrow-up-1-9">
+    Average of 1/rank for the first correct result. Penalizes systems that find the right answer but bury it at rank 5 vs rank 1.
+  </Card>
+  <Card title="NDCG" icon="chart-line">
+    Normalized Discounted Cumulative Gain. Accounts for graded relevance (highly relevant vs. somewhat relevant) and rank position.
+  </Card>
+  <Card title="Context Precision / Recall" icon="ruler">
+    Of the chunks retrieved, what fraction are actually relevant? Of all relevant chunks, what fraction did you retrieve? Both matter.
+  </Card>
+</CardGroup>
+
+### Automated Evaluation with RAGAs
+
+[RAGAs](https://docs.ragas.io) provides a framework for automated RAG evaluation using LLM-as-a-judge metrics that don't require a labeled ground-truth dataset.
+
+```python title="ragas_eval.py"
+from ragas import evaluate
+from ragas.metrics import (
+    faithfulness,
+    answer_relevancy,
+    context_precision,
+    context_recall,
+)
+from datasets import Dataset
+
+# Build evaluation dataset
+eval_data = {
+    "question": ["What is the return window?"],
+    "answer": [generated_answer],
+    "contexts": [retrieved_chunks],
+    "ground_truth": ["Items can be returned within 30 days."]
+}
+dataset = Dataset.from_dict(eval_data)
+
+# Run evaluation
+results = evaluate(
+    dataset=dataset,
+    metrics=[faithfulness, answer_relevancy, context_precision, context_recall]
+)
+print(results)
+```
+
+<Info>
+  Run RAGAs evaluation on a representative sample of 50–100 questions before and after each change to your retrieval pipeline. Even small improvements in context precision compound significantly into end-to-end answer quality.
+</Info>

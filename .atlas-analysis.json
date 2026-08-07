@@ -1,13 +1,11 @@
 {
-  "$schema": "https://mintlify.com/docs.json",
+  "projectType": "general",
+  "projectName": "AI Engineering Portfolio",
+  "projectDescription": "A personal technical knowledge base and portfolio showcasing AI application engineering, agent architecture, LLM infrastructure, and practical insights from real-world AI projects.",
   "theme": "luma",
-  "name": "AI Engineering Portfolio",
-  "colors": {
-    "primary": "#ef7025",
-    "light": "#eec9bc",
-    "dark": "#4fa1ab"
-  },
-  "favicon": "/favicon.svg",
+  "primaryColor": "#ef7025",
+  "lightColor": "#eec9bc",
+  "darkColor": "#4fa1ab",
   "navigation": {
     "tabs": [
       {
@@ -80,16 +78,23 @@
       }
     ]
   },
-  "navbar": {
-    "primary": {
-      "type": "github",
-      "href": "https://github.com/dingguoliang"
-    }
-  },
-  "footer": {
-    "socials": {
-      "github": "https://github.com/dingguoliang",
-      "linkedin": "https://linkedin.com/in/dingguoliang"
-    }
-  }
+  "keyFeatures": [
+    "AI Agent architecture with LangGraph workflows",
+    "Retrieval-Augmented Generation (RAG) pipeline design",
+    "LLM deployment and inference infrastructure",
+    "Embedding models, vector search, and reranking",
+    "ASR, TTS, and multimodal AI systems",
+    "AI SaaS architecture and multi-tenant design",
+    "Real-world engineering notes and lessons learned",
+    "Code examples and architecture patterns"
+  ],
+  "publicApiSurface": [
+    "LangGraph StateGraph workflow definition",
+    "RAG pipeline: embed → retrieve → rerank → generate",
+    "LLM inference API patterns (OpenAI-compatible)",
+    "Multi-agent orchestration patterns",
+    "Vector store integration (Qdrant, Chroma, Pinecone)",
+    "ASR/TTS integration patterns",
+    "Multi-tenant SaaS architecture patterns"
+  ]
 }

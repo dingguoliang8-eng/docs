@@ -1,0 +1,335 @@
+---
+title: "LLM Performance Tips: Latency and Throughput Optimization"
+sidebarTitle: "Performance Tips"
+description: "Practical techniques to reduce LLM application latency and increase throughput: async calls, caching, prompt compression, and inference optimization."
+---
+
+LLM applications have unique performance characteristics — the bottleneck is almost always LLM inference latency, not compute or I/O. That means standard optimization approaches (faster database queries, better indexing, CDN caching) barely move the needle. You need a different mental model: minimize the number of LLM calls, make the ones you do make as fast as possible, and hide latency from users through streaming.
+
+<Note>
+  The optimization hierarchy that consistently pays off: **async** \> **caching** \> **model routing** \> **prompt compression** \> **inference optimization**. Work in that order. Async and caching are high-impact and low-risk; inference tuning is low-impact unless you're running at scale.
+</Note>
+
+---
+
+## Measure First
+
+Profile your pipeline before optimizing — every system has a different bottleneck, and guessing wrong wastes time. The key metrics to track for LLM applications are different from traditional services:
+
+| Metric | What It Measures | Why It Matters |
+|---|---|---|
+| **Time to First Token (TTFT)** | Latency from request to first streamed token | Perceived responsiveness — what users feel |
+| **Total Generation Time** | Full response completion time | Throughput and cost |
+| **Retrieval Latency** | Vector search + reranking time | Often the second biggest bottleneck |
+| **End-to-End Latency** | Wall clock from user request to full response | The number that actually matters to users |
+
+Use LangSmith tracing or OpenTelemetry to get per-step timing automatically. For quick profiling during development, a timing decorator works well:
+
+```python title="timing_decorator.py"
+import time
+from functools import wraps
+
+def timed(name: str):
+    """Decorator to log execution time of async functions."""
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            start = time.perf_counter()
+            result = await func(*args, **kwargs)
+            elapsed = time.perf_counter() - start
+            print(f"[TIMING] {name}: {elapsed * 1000:.1f}ms")
+            return result
+        return wrapper
+    return decorator
+
+@timed("retrieval")
+async def retrieve(query: str) -> list:
+    return await vectorstore.asimilarity_search(query, k=5)
+
+@timed("llm_call")
+async def generate(messages: list) -> str:
+    response = await llm.ainvoke(messages)
+    return response.content
+```
+
+---
+
+## Async Everything
+
+Python async is essential for LLM applications — LLM calls are pure I/O wait. The Python process is doing nothing while waiting for the API response. With synchronous code, that idle time blocks every other operation. With async, you can run independent operations concurrently.
+
+Use `ainvoke` / `astream` instead of `invoke` / `stream` throughout your LangChain/LangGraph code. The async versions are almost always available and the migration is usually a one-line change.
+
+The real win comes from parallelizing independent operations:
+
+```python title="parallel_async.py"
+import asyncio
+from langchain_openai import ChatOpenAI
+from langchain_community.vectorstores import Chroma
+
+llm = ChatOpenAI(model="gpt-4o", streaming=True)
+vectorstore = Chroma(...)
+
+async def handle_query(query: str, thread_id: str) -> str:
+    # These two operations are completely independent — run them in parallel
+    retrieval_task = asyncio.create_task(
+        vectorstore.asimilarity_search(query, k=5)
+    )
+    history_task = asyncio.create_task(
+        get_conversation_history(thread_id)
+    )
+
+    # Wait for both to complete — total time = max(retrieval, history)
+    # instead of retrieval + history
+    chunks, history = await asyncio.gather(retrieval_task, history_task)
+
+    context = "\n\n".join(doc.page_content for doc in chunks)
+    messages = history + [{"role": "user", "content": query}]
+
+    return await llm.ainvoke(messages)
+```
+
+<Tip>
+  `asyncio.gather` is your most powerful latency tool for retrieval-augmented
+  pipelines. If you're fetching conversation history, user profile data, and
+  retrieved chunks, run all three in parallel. It turns a 600ms sequential
+  operation into a 200ms parallel one.
+</Tip>
+
+---
+
+## Semantic Caching
+
+Exact-match caching (caching on the verbatim query string) has very low hit rates for LLM applications because users phrase questions differently even when they mean the same thing. Semantic caching solves this by caching on meaning rather than exact text.
+
+The idea: embed each incoming query, find the nearest cached query by cosine similarity, and if the similarity exceeds a threshold (typically 0.95), return the cached response.
+
+```python title="semantic_cache.py"
+from langchain.globals import set_llm_cache
+from langchain_community.cache import RedisSemanticCache
+from langchain_openai import OpenAIEmbeddings
+
+# Set up semantic caching backed by Redis
+set_llm_cache(RedisSemanticCache(
+    redis_url="redis://localhost:6379",
+    embedding=OpenAIEmbeddings(model="text-embedding-3-small"),
+    score_threshold=0.95  # Cosine similarity threshold
+))
+
+# All subsequent LangChain LLM calls automatically use the cache
+# No changes needed to your chain or agent code
+```
+
+Semantic caching is especially effective for:
+
+- **FAQ-style queries** — "What are your pricing plans?" phrased 20 different ways
+- **High-traffic, low-variance queries** — product search, support queries with common patterns
+- **Expensive chains** — multi-step chains where a cache hit saves several LLM calls
+
+<Info>
+  Cache hit rates of 30–50% are realistic for support/FAQ use cases. At that
+  rate, you're cutting LLM costs by a third and slashing average latency
+  dramatically — cached responses return in &lt;50ms vs 1–3 seconds for live
+  inference.
+</Info>
+
+---
+
+## Prompt Compression
+
+Long prompts mean higher latency and higher cost. Every token in your prompt adds to the prefill time and the cost per call. Retrieved context is often the biggest contributor — chunking strategies frequently produce more text than the model actually needs.
+
+**LLMLingua** is the most effective tool I've found for this. It compresses retrieved context by up to 20x by removing tokens that are redundant or low-information, with minimal quality loss on downstream tasks.
+
+```python title="prompt_compression.py"
+from llmlingua import PromptCompressor
+
+compressor = PromptCompressor(
+    model_name="microsoft/llmlingua-2-bert-base-multilingual-cased-meetingbank",
+    use_llmlingua2=True
+)
+
+def compress_context(chunks: list[str], target_ratio: float = 0.3) -> str:
+    """Compress retrieved chunks to target_ratio of original length."""
+    full_context = "\n\n".join(chunks)
+
+    compressed = compressor.compress_prompt(
+        full_context,
+        rate=target_ratio,         # Keep 30% of tokens
+        force_tokens=["\n\n"],     # Preserve paragraph boundaries
+    )
+    return compressed["compressed_prompt"]
+
+# Before: 8,000 tokens of retrieved context
+# After:  ~2,400 tokens with ~95% of the relevant information preserved
+```
+
+**Manual compression strategies** that work without a compression model:
+
+- **Extract only relevant sentences** from chunks using a small, fast model
+- **Reranking** reduces context size by keeping only top-3 to top-5 chunks rather than top-20
+- **Summarize document-level context** rather than chunking full documents
+
+---
+
+## Model Routing by Complexity
+
+Not all queries need GPT-4o. Using your most capable (and most expensive) model for every query is like using a sledgehammer to crack a nut. Simple factual lookups, yes/no questions, and classification tasks run equally well on smaller, faster, cheaper models.
+
+| Query Type | Example | Recommended Model | Relative Cost |
+|---|---|---|---|
+| Factual lookup | "What is the capital of France?" | `gpt-4o-mini` | 1x |
+| Classification | "Is this positive or negative?" | `gpt-4o-mini` | 1x |
+| Single-step Q&A | "What's the return policy?" | `gpt-4o-mini` | 1x |
+| Multi-step reasoning | "Compare these three options and recommend" | `gpt-4o` | ~17x |
+| Code generation | Writing non-trivial functions | `gpt-4o` | ~17x |
+| Analysis | "Summarize and identify themes across these docs" | `gpt-4o` | ~17x |
+
+Here's a lightweight routing implementation using a classifier prompt:
+
+```python title="model_router.py"
+from langchain_openai import ChatOpenAI
+
+# Use the fast model to classify — the meta-cost is tiny
+classifier_llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+
+CLASSIFIER_PROMPT = """
+Classify this query as 'simple' or 'complex'.
+Simple: factual lookup, yes/no question, single-step retrieval, classification
+Complex: multi-step reasoning, comparative analysis, code generation, synthesis
+
+Respond with ONLY the word: simple or complex
+
+Query: {query}
+"""
+
+async def route_model(query: str) -> str:
+    """Route to gpt-4o-mini for simple queries, gpt-4o for complex ones."""
+    response = await classifier_llm.ainvoke(
+        CLASSIFIER_PROMPT.format(query=query)
+    )
+    classification = response.content.strip().lower()
+    model = "gpt-4o" if classification == "complex" else "gpt-4o-mini"
+    return model
+
+async def generate_with_routing(query: str, messages: list) -> str:
+    model_name = await route_model(query)
+    llm = ChatOpenAI(model=model_name, temperature=0.1)
+    response = await llm.ainvoke(messages)
+    return response.content
+```
+
+---
+
+## Streaming for Perceived Performance
+
+Perceived latency is often more important than actual latency. A user waiting for a 3-second response with no feedback feels much longer than a 3-second response where text starts appearing in 300ms.
+
+Stream LLM output to the user immediately — don't wait for the full response to arrive before displaying anything.
+
+```python title="streaming_endpoint.py"
+from fastapi import FastAPI
+from fastapi.responses import StreamingResponse
+from langchain_openai import ChatOpenAI
+
+app = FastAPI()
+llm = ChatOpenAI(model="gpt-4o", streaming=True)
+
+@app.get("/chat")
+async def chat_stream(query: str):
+    async def generate():
+        async for chunk in llm.astream(query):
+            if chunk.content:
+                # Server-sent events format
+                yield f"data: {chunk.content}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no"  # Disable nginx buffering
+        }
+    )
+```
+
+Key principles for streaming UX:
+
+- **First token latency matters more than total generation time** — optimize your pipeline to minimize time from request to first token
+- **Combine with a skeleton UI** — render placeholder shapes before content arrives; users perceive this as faster
+- **Stream processing steps too** — if your pipeline has multiple steps, stream status updates ("Searching knowledge base...", "Generating response...") rather than showing a blank loading state
+
+---
+
+## vLLM Throughput Tuning
+
+For self-hosted inference at scale, vLLM is the standard. These are the configuration knobs that actually matter:
+
+<Accordion title="--max-num-seqs: Maximum Concurrent Sequences">
+  Controls how many requests vLLM processes in parallel. Higher values increase
+  throughput but also increase memory pressure and per-request latency.
+
+  Start with the default, then increase incrementally while monitoring GPU
+  memory utilization and p99 latency. A good rule of thumb: increase
+  `max-num-seqs` until GPU memory hits ~85%, then stop.
+
+  ```bash title="vllm_startup.sh"
+  vllm serve meta-llama/Llama-3.1-8B-Instruct \
+    --max-num-seqs 256 \
+    --port 8000
+  ```
+</Accordion>
+
+<Accordion title="--gpu-memory-utilization: Maximize KV Cache">
+  The KV cache is what enables efficient batching — it stores intermediate
+  attention states so vLLM doesn't recompute them on every token. Larger KV
+  cache = more sequences can be batched = higher throughput.
+
+  Set `--gpu-memory-utilization 0.90` to give vLLM 90% of GPU memory for
+  model weights and KV cache. The remaining 10% is headroom for other processes
+  and to avoid OOM on unexpected memory spikes.
+
+  ```bash title="vllm_memory.sh"
+  vllm serve meta-llama/Llama-3.1-8B-Instruct \
+    --gpu-memory-utilization 0.90
+  ```
+</Accordion>
+
+<Accordion title="Quantization: AWQ for Memory Efficiency">
+  AWQ (Activation-aware Weight Quantization) reduces model memory by roughly
+  50% with minimal quality degradation — typically less than 1–2% on standard
+  benchmarks. This lets you fit a larger model on the same GPU, or fit the same
+  model while leaving more room for KV cache.
+
+  Use pre-quantized AWQ models from HuggingFace rather than quantizing yourself:
+
+  ```bash title="vllm_awq.sh"
+  # Use a pre-quantized AWQ model — no local quantization needed
+  vllm serve TheBloke/Llama-2-13B-chat-AWQ \
+    --quantization awq \
+    --gpu-memory-utilization 0.90
+  ```
+
+  AWQ is generally preferable to GPTQ for inference — similar compression ratio
+  with better throughput characteristics.
+</Accordion>
+
+<Accordion title="Tensor Parallelism: Multi-GPU Scaling">
+  For models that don't fit on a single GPU (70B+ parameter models, or smaller
+  models where you need very high KV cache), tensor parallelism splits the model
+  across multiple GPUs.
+
+  ```bash title="vllm_tensor_parallel.sh"
+  # Split a 70B model across 4 GPUs
+  vllm serve meta-llama/Llama-3.1-70B-Instruct \
+    --tensor-parallel-size 4 \
+    --gpu-memory-utilization 0.90 \
+    --max-num-seqs 128
+  ```
+
+  Tensor parallelism adds inter-GPU communication overhead. For smaller models
+  that fit on one GPU, running multiple single-GPU instances behind a load
+  balancer often gives better throughput than tensor parallelism across multiple
+  GPUs.
+</Accordion>

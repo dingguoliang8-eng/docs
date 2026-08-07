@@ -1,0 +1,120 @@
+---
+title: "About Me: AI Application to AI Agent Engineer"
+sidebarTitle: "About Me"
+description: "My background as an AI Application Engineer, the systems I've built, and my path toward AI Agent and AI Runtime engineering."
+---
+
+I am an AI Application Engineer on a deliberate path toward AI Agent and AI Runtime engineering. My work sits at the intersection of applied machine learning and backend systems engineering — I build the layer between raw model capabilities and production software that users and businesses depend on. This portfolio documents the systems I have designed, the patterns I have found reliable, and the direction I am heading.
+
+<Info>
+  This page is written in first person — it is a genuine account of my background and goals, not a generated summary. If you want to discuss any of the projects or ideas here, the best way to reach me is through the contact link in the site footer.
+</Info>
+
+---
+
+## Engineering Background
+
+My hands-on experience covers the core disciplines of modern AI application development:
+
+**LLM Application Development**
+I have built production applications on top of OpenAI GPT-4 and the Anthropic Claude family, handling prompt engineering, structured output parsing, function calling, and context window management at scale. I have also worked extensively with open-source models — Llama, Mistral, and Qwen — in both fine-tuning and direct inference contexts, which gives me a grounded understanding of the capability and cost trade-offs between proprietary and open-weight models.
+
+**RAG Pipeline Design and Optimisation**
+I have designed and iterated on retrieval-augmented generation pipelines from the ground up — from document ingestion and chunking strategy through embedding model selection, vector store indexing, hybrid search configuration, and retrieval evaluation. I have learned where naive RAG breaks down in production and how to address it with re-ranking, query transformation, and contextual compression.
+
+**LangGraph Agent Workflows**
+I have built stateful, multi-step agent workflows using LangGraph, including tool-use agents, reflection loops, and multi-agent systems with specialised subgraph nodes. I have navigated the practical challenges of agent reliability: handling tool failures gracefully, managing long-running state, and designing human-in-the-loop checkpoints.
+
+**LLM Deployment and Inference**
+I have deployed and managed self-hosted LLM inference stacks using vLLM and Ollama, tuning for throughput and latency across different hardware configurations. I have also worked with cloud-managed inference endpoints and understand the operational trade-offs — cost, latency, control, and compliance — that drive the decision between self-hosted and managed serving.
+
+**AI SaaS Products with Multi-Tenant Architecture**
+I have contributed to and led development on AI SaaS products where tenant isolation, usage metering, and per-tenant model configuration are first-class requirements. This means understanding how LLM features interact with the underlying SaaS platform: API gateways, rate limiting, billing hooks, and audit logging.
+
+**Speech AI (ASR and TTS)**
+I have integrated and deployed automatic speech recognition using OpenAI Whisper (including faster-whisper variants for low-latency use cases) and text-to-speech using CosyVoice and FishSpeech. I have built end-to-end voice pipelines — audio input, transcription, LLM processing, and synthesised speech output — for both batch and streaming scenarios.
+
+---
+
+## Technical Stack
+
+<CardGroup cols={2}>
+  <Card
+    title="Languages"
+    icon="code"
+    href="/llm-infra/overview"
+  >
+    **Python** for all ML and backend work. **TypeScript** for API layers, full-stack AI features, and tooling.
+  </Card>
+  <Card
+    title="Frameworks & Orchestration"
+    icon="layer-group"
+    href="/agents/overview"
+  >
+    **LangChain**, **LangGraph**, **FastAPI**. LangGraph for stateful agent workflows; FastAPI for serving inference APIs.
+  </Card>
+  <Card
+    title="LLMs"
+    icon="brain"
+    href="/llm-infra/overview"
+  >
+    **OpenAI GPT-4**, **Claude (Anthropic)**, **Llama**, **Mistral**, **Qwen** — proprietary and open-weight.
+  </Card>
+  <Card
+    title="Vector Stores"
+    icon="database"
+    href="/rag/overview"
+  >
+    **Qdrant**, **Chroma**, **Pinecone** — selected based on scale, filtering requirements, and deployment environment.
+  </Card>
+  <Card
+    title="Inference Engines"
+    icon="microchip"
+    href="/llm-infra/overview"
+  >
+    **vLLM**, **Ollama**, **TGI (Text Generation Inference)** for self-hosted model serving.
+  </Card>
+  <Card
+    title="Speech AI"
+    icon="microphone"
+    href="/multimodal/overview"
+  >
+    **Whisper** (ASR), **CosyVoice**, **FishSpeech** (TTS) for voice pipeline construction.
+  </Card>
+  <Card
+    title="Cloud Platforms"
+    icon="cloud"
+    href="/llm-infra/overview"
+  >
+    **AWS**, **GCP**, **Azure** — primarily AWS for compute and storage, GCP for managed ML services.
+  </Card>
+</CardGroup>
+
+---
+
+## What I'm Building Toward
+
+My goal is to move from AI Application Engineering into **AI Agent Engineering** and ultimately **AI Runtime Engineering**.
+
+The distinction matters to me. AI application engineering is about integrating model capabilities into software products. Agent engineering is about designing systems that reason, plan, and act autonomously across extended time horizons — systems that can recover from failures, coordinate sub-agents, manage long-running state, and interact with the world through tools and APIs. AI runtime engineering goes a level deeper still: building the execution environments, scheduling infrastructure, and frameworks that agent systems run on top of.
+
+Concretely, I am working toward:
+
+- Designing and deploying **autonomous multi-agent systems** capable of handling complex, open-ended tasks in production environments
+- Contributing to **open-source agent frameworks** — particularly in areas of state management, tool execution, and agent evaluation
+- Building and experimenting with **agent runtimes and orchestration layers** that go beyond what current frameworks expose
+- Developing rigorous **agent evaluation methodology**: how do you measure capability, reliability, and safety for systems that act in the world?
+
+<Tip>
+  The Projects & Notes tab documents the experiments and half-finished explorations that are moving me toward these goals — including things that did not work and why.
+</Tip>
+
+---
+
+## Why This Portfolio
+
+Most AI engineering knowledge is scattered across GitHub READMEs, blog posts, and Discord threads. I built this knowledge base because I needed a structured place to consolidate what I have learned from real projects — the architectural decisions, the failure modes, the benchmark numbers, and the reasoning behind trade-offs that are not obvious from documentation alone.
+
+It is also a commitment device. Writing up a system forces precision in a way that building it does not. If I cannot explain clearly why a retrieval pipeline is chunked a certain way, or why a particular agent graph topology was chosen over an alternative, I probably do not understand it well enough yet.
+
+This portfolio is a living document. It grows as I build, learn, and revise my understanding. The goal is not comprehensiveness — it is honesty about what I know, how I know it, and where the edges of my knowledge are.
