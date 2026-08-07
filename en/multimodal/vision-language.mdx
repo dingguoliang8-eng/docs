@@ -1,0 +1,361 @@
+---
+title: "Vision-Language Models: Document and Image Understanding"
+sidebarTitle: "Vision & Language"
+description: "Use vision-language models for document understanding, image analysis, and multimodal RAG. Covers GPT-4o Vision, Claude, and open-source VLMs like Qwen-VL."
+---
+Vision-language models (VLMs) open up a new class of AI applications — from understanding scanned documents to answering questions about images to processing charts, diagrams, and mixed-media PDFs. Where traditional OCR extracts raw text, VLMs understand *layout*, *context*, and *visual relationships*. Where image classifiers output labels, VLMs output rich natural-language explanations. This page covers how to work with VLMs in production, from simple image Q&A to full multimodal RAG pipelines.
+
+## Vision-Language Model Options
+
+<AccordionGroup>
+  <Accordion title="GPT-4o" icon="star">
+    Best-in-class vision understanding across a wide range of tasks. Handles complex documents with mixed layouts, tables, handwriting, and diagrams. The default choice when accuracy matters most and cost is secondary.
+  </Accordion>
+  <Accordion title="Claude 3.5 Sonnet" icon="feather">
+    Strong at **document understanding** and structured data extraction. Particularly reliable at following complex extraction instructions and producing well-formatted JSON output from document images.
+  </Accordion>
+  <Accordion title="Gemini 1.5 Pro" icon="gem">
+    Long-context multimodal model — accepts up to **1M tokens** with native video frame support. Best for analyzing long documents, video content, or sequences of related images within a single context window.
+  </Accordion>
+  <Accordion title="Qwen-VL / Qwen2-VL" icon="globe">
+    Open-source VLM from Alibaba with strong **multilingual document understanding** — especially Chinese, Japanese, and Arabic. Self-hostable, available on Ollama and Hugging Face, and competitive with proprietary models on document tasks.
+  </Accordion>
+  <Accordion title="LLaVA" icon="code">
+    Lightweight open-source VLM designed for **custom deployment**. Multiple sizes (7B, 13B, 34B) make it runnable on modest hardware. Best for applications requiring on-premise deployment or fine-tuning on domain-specific images.
+  </Accordion>
+  <Accordion title="ColPali" icon="file-image">
+    A specialized model for **document retrieval** — embeds full document page images directly without OCR. Designed for multimodal RAG where you want to retrieve relevant pages from a corpus of PDFs.
+  </Accordion>
+</AccordionGroup>
+
+## Image Input Patterns
+
+All major VLM APIs accept images either as a URL or as a base64-encoded string. Here's how to structure both in Python:
+
+```python title="vlm_image_input.py"
+from openai import OpenAI
+import base64
+
+client = OpenAI()
+
+# From URL — fastest, no encoding overhead
+response = client.chat.completions.create(
+    model="gpt-4o",
+    messages=[{
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "What does this chart show?"},
+            {"type": "image_url", "image_url": {"url": "https://example.com/chart.png"}}
+        ]
+    }]
+)
+print(response.choices[0].message.content)
+
+# From local file (base64) — required for private or local files
+with open("document.png", "rb") as f:
+    image_data = base64.b64encode(f.read()).decode("utf-8")
+
+response = client.chat.completions.create(
+    model="gpt-4o",
+    messages=[{
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "Extract all text from this document."},
+            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_data}"}}
+        ]
+    }]
+)
+print(response.choices[0].message.content)
+```
+
+<Tip>
+  VLMs downsample large images before processing them. GPT-4o uses a tiling strategy for high-resolution images (up to 2048×2048 per tile), but very large document scans may still lose fine detail like small fonts or dense tables. If your document is A4 or larger, consider **splitting it into individual page tiles** (768×768 px or 1024×1024 px) and sending each tile as a separate image in your message.
+</Tip>
+
+## Document Understanding Use Cases
+
+<AccordionGroup>
+  <Accordion title="Layout-Aware Text Extraction (OCR Replacement)" icon="file-lines">
+    Traditional OCR extracts raw characters but loses context — a number in a table cell looks identical to a number in a header. VLMs understand the **spatial and semantic layout** of a document, making them far more accurate for complex layouts like multi-column text, nested tables, and form fields.
+
+    ```python title="layout_aware_extraction.py"
+    from openai import OpenAI
+    import base64
+
+    client = OpenAI()
+
+    with open("complex_form.png", "rb") as f:
+        image_data = base64.b64encode(f.read()).decode("utf-8")
+
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[{
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": (
+                        "Extract all text from this form, preserving the structure. "
+                        "Return field labels and their corresponding values as a JSON object."
+                    )
+                },
+                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_data}"}}
+            ]
+        }]
+    )
+    ```
+  </Accordion>
+
+  <Accordion title="Invoice and Receipt Parsing" icon="receipt">
+    Structured extraction is one of the highest-value VLM use cases in enterprise settings. Combine a VLM with a Pydantic schema and LangChain's `.with_structured_output()` to get reliable, type-safe JSON from any document image.
+
+    ```python title="invoice_extraction.py"
+    from pydantic import BaseModel
+    from langchain_openai import ChatOpenAI
+    import base64
+
+    class LineItem(BaseModel):
+        description: str
+        quantity: int
+        unit_price: float
+        total: float
+
+    class InvoiceData(BaseModel):
+        vendor_name: str
+        invoice_number: str
+        invoice_date: str
+        total_amount: float
+        line_items: list[LineItem]
+
+    llm = ChatOpenAI(model="gpt-4o").with_structured_output(InvoiceData)
+
+    with open("invoice.png", "rb") as f:
+        image_data = base64.b64encode(f.read()).decode("utf-8")
+
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Extract invoice data as structured JSON."},
+                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_data}"}}
+            ]
+        }
+    ]
+
+    invoice: InvoiceData = llm.invoke(messages)
+    print(f"Vendor: {invoice.vendor_name}")
+    print(f"Total: ${invoice.total_amount:.2f}")
+    print(f"Line items: {len(invoice.line_items)}")
+    ```
+  </Accordion>
+
+  <Accordion title="Chart and Diagram Q&A" icon="chart-line">
+    VLMs can explain trends, extract data points, and reason about visualizations in ways that are impossible with text-only models. Useful for automated report analysis, financial data extraction, and scientific paper parsing.
+
+    ```python title="chart_analysis.py"
+    from openai import OpenAI
+    import base64
+
+    client = OpenAI()
+
+    with open("quarterly_chart.png", "rb") as f:
+        image_data = base64.b64encode(f.read()).decode("utf-8")
+
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[{
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": (
+                        "Analyze this chart. What are the key trends? "
+                        "Extract the approximate values for each data point and "
+                        "identify any significant changes or anomalies."
+                    )
+                },
+                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_data}"}}
+            ]
+        }]
+    )
+    ```
+  </Accordion>
+
+  <Accordion title="Technical Diagram Analysis" icon="diagram-project">
+    Architecture diagrams, system flowcharts, network topologies, and UML diagrams are notoriously hard to parse programmatically. VLMs can describe components, relationships, and data flow from a PNG export of any diagram tool.
+
+    ```python title="diagram_analysis.py"
+    from openai import OpenAI
+    import base64
+
+    client = OpenAI()
+
+    with open("system_architecture.png", "rb") as f:
+        image_data = base64.b64encode(f.read()).decode("utf-8")
+
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[{
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": (
+                        "Describe this system architecture diagram. "
+                        "List all components, their roles, and how data flows between them. "
+                        "Identify any potential single points of failure."
+                    )
+                },
+                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_data}"}}
+            ]
+        }]
+    )
+    ```
+  </Accordion>
+</AccordionGroup>
+
+<Note>
+  Vision API calls cost significantly more than text-only calls. GPT-4o charges per **image tile** (each 512×512 px region counts as one tile). A full-page document scan at 1024×1024 px costs roughly 5–10× a comparable text query. For high-volume document processing, benchmark cost vs. accuracy tradeoffs between GPT-4o (highest accuracy), Claude 3.5 Sonnet, and open-source alternatives like Qwen2-VL before committing to a provider.
+</Note>
+
+## Multimodal RAG
+
+Standard RAG pipelines are built for text — but real-world documents are full of images, charts, and mixed layouts that text extraction butchers. Multimodal RAG extends the retrieval pipeline to handle visual content natively.
+
+### Strategy 1: Text + Image Descriptions
+
+The simplest approach: extract text from documents normally, then use a VLM to generate text descriptions of each image or chart. Embed both together and treat the whole document as text.
+
+- **Pros:** Works with any existing vector database, no special embeddings needed.
+- **Cons:** VLM-generated descriptions may miss nuance; adds per-image API cost during indexing.
+
+### Strategy 2: Multimodal Embeddings (CLIP / SigLIP)
+
+Use a vision encoder like **CLIP** or **SigLIP** to embed document images alongside text embeddings. At query time, embed the user's question and retrieve both text chunks and relevant images by cosine similarity.
+
+```python title="clip_image_embedding.py"
+from transformers import CLIPModel, CLIPProcessor
+from PIL import Image
+import torch
+
+model = CLIPModel.from_pretrained("openai/clip-vit-large-patch14")
+processor = CLIPProcessor.from_pretrained("openai/clip-vit-large-patch14")
+
+def embed_image(image_path: str) -> list[float]:
+    image = Image.open(image_path)
+    inputs = processor(images=image, return_tensors="pt")
+    with torch.no_grad():
+        embedding = model.get_image_features(**inputs)
+    return embedding.squeeze().tolist()
+
+def embed_text(query: str) -> list[float]:
+    inputs = processor(text=[query], return_tensors="pt", padding=True)
+    with torch.no_grad():
+        embedding = model.get_text_features(**inputs)
+    return embedding.squeeze().tolist()
+```
+
+### Strategy 3: ColPali — Direct Page Embedding
+
+**ColPali** is a retrieval model that embeds entire document page images directly — no OCR, no text extraction, no description generation. It learns to retrieve visually relevant pages from a query, making it exceptionally accurate for document corpora where layout is semantically important (e.g., scientific papers, legal filings, financial reports).
+
+```python title="colpali_retrieval.py"
+from colpali_engine.models import ColPali, ColPaliProcessor
+from PIL import Image
+import torch
+
+model = ColPali.from_pretrained(
+    "vidore/colpali-v1.2",
+    torch_dtype=torch.bfloat16,
+    device_map="cuda"
+)
+processor = ColPaliProcessor.from_pretrained("vidore/colpali-v1.2")
+
+# Index: embed document pages
+pages = [Image.open(f"page_{i}.png") for i in range(10)]
+batch = processor.process_images(pages).to(model.device)
+with torch.no_grad():
+    page_embeddings = model(**batch)  # Shape: [num_pages, num_patches, dim]
+
+# Retrieve: embed query and score against pages
+query = "What was the revenue in Q3?"
+query_batch = processor.process_queries([query]).to(model.device)
+with torch.no_grad():
+    query_embedding = model(**query_batch)
+
+# Late interaction scoring (MaxSim)
+scores = processor.score_multi_vector(query_embedding, page_embeddings)
+best_page_idx = scores.argmax().item()
+print(f"Most relevant page: {best_page_idx}")
+```
+
+<Info>
+  ColPali's **late interaction** mechanism (similar to ColBERT for text) scores queries against individual image patches rather than a single pooled embedding. This makes it far more precise than CLIP-style retrieval for document pages with multiple distinct content regions.
+</Info>
+
+## Open-Source VLMs with Ollama
+
+For on-premise deployments, privacy-sensitive workloads, or cost-sensitive applications, you can run powerful open-source VLMs locally with Ollama.
+
+<CodeGroup>
+```bash title="Pull VLM Models"
+ollama pull llava:13b
+# or for stronger multilingual document understanding:
+ollama pull qwen2-vl:7b
+```
+
+```python title="ollama_vlm_inference.py"
+from langchain_ollama import ChatOllama
+import base64
+
+llm = ChatOllama(model="llava:13b")
+
+with open("image.jpg", "rb") as f:
+    img_b64 = base64.b64encode(f.read()).decode()
+
+response = llm.invoke(
+    [{"role": "user", "content": [
+        {"type": "text", "text": "Describe this image in detail."},
+        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}}
+    ]}]
+)
+
+print(response.content)
+```
+
+```python title="ollama_structured_extraction.py"
+from langchain_ollama import ChatOllama
+from pydantic import BaseModel
+import base64
+
+class ImageSummary(BaseModel):
+    description: str
+    objects_detected: list[str]
+    dominant_colors: list[str]
+    text_present: bool
+
+llm = ChatOllama(model="qwen2-vl:7b").with_structured_output(ImageSummary)
+
+with open("scene.jpg", "rb") as f:
+    img_b64 = base64.b64encode(f.read()).decode()
+
+summary: ImageSummary = llm.invoke(
+    [{"role": "user", "content": [
+        {"type": "text", "text": "Analyze this image and extract structured metadata."},
+        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}}
+    ]}]
+)
+
+print(f"Objects: {summary.objects_detected}")
+print(f"Text present: {summary.text_present}")
+```
+</CodeGroup>
+
+<AccordionGroup>
+  <Accordion title="LLaVA 13B" icon="server">
+    Best for general image understanding on a single consumer GPU (16GB VRAM). Handles scene description, object detection questions, and basic document reading.
+  </Accordion>
+  <Accordion title="Qwen2-VL 7B" icon="globe">
+    Stronger than LLaVA on document and multilingual tasks. Recommended when your documents contain non-Latin scripts or complex table layouts.
+  </Accordion>
+</AccordionGroup>

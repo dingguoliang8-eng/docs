@@ -1,0 +1,230 @@
+---
+title: "Hard-Won Lessons From Building Production AI Systems"
+sidebarTitle: "Lessons Learned"
+description: "Hard-won lessons from building and shipping AI agent systems, RAG pipelines, and LLM SaaS products. What worked, what failed, and what I'd do differently."
+---
+These are the lessons that changed how I build AI systems — collected from real projects, real failures, and the kind of debugging sessions that last until 2am. Not theory. Not tutorials. Just the things I wish someone had told me before I learned them the hard way.
+
+---
+
+## Lesson 1: Evaluate Before You Optimize
+
+The problem I kept running into early on: I'd spend weeks tuning chunking strategies, swapping embedding models, and rewriting system prompts — and have absolutely no idea whether any of it was working. Every change _felt_ like an improvement until it didn't.
+
+The fix is simple in retrospect: **build an evaluation dataset of 50–100 question-and-answer pairs before touching a single hyperparameter.** These should reflect real user queries against your actual corpus. Once you have ground truth, every optimization decision becomes a measurement problem instead of a gut-feel problem.
+
+The result is clear signal on what actually improves answers versus what just feels better after you've stared at the outputs for three hours.
+
+<Tip>
+  Start with [RAGAs](https://docs.ragas.io/) for automated evaluation —
+  **Faithfulness** and **Answer Relevance** are the most actionable metrics.
+  Faithfulness catches hallucinations relative to retrieved context; Answer
+  Relevance catches responses that are technically true but useless.
+</Tip>
+
+---
+
+## Lesson 2: Agent Loops Are Sneaky
+
+Agents can get stuck in loops — especially when tool calls fail silently. The agent observes a failed tool result, decides to try again, fails again, and repeats indefinitely. If you're not watching, your API bill will be.
+
+Always implement three guardrails at minimum:
+
+- **`max_iterations` guard** — hard cap on how many steps the agent can take
+- **Explicit loop detection** — check if the last N tool calls are identical
+- **Timeout at the orchestration layer** — wall-clock limit independent of iteration count
+
+Here's a clean pattern for the iteration guard with LangGraph:
+
+```python title="iteration_guard.py"
+from langgraph.graph import StateGraph
+
+def check_iteration_limit(state: AgentState) -> str:
+    if state.get("iteration_count", 0) >= 10:
+        return "force_end"
+    return "continue"
+
+# Wire it into your graph as a conditional edge
+graph.add_conditional_edges(
+    "agent",
+    check_iteration_limit,
+    {"continue": "tools", "force_end": END}
+)
+```
+
+<Warning>
+  Without a `max_iterations` guard, a looping agent will happily burn through
+  your entire API budget. I've seen a single stuck agent rack up $40 in a
+  weekend on a personal project. Guard every graph.
+</Warning>
+
+---
+
+## Lesson 3: Context Window Management Is Non-Trivial
+
+In long-running agents and multi-turn conversations, the message history grows continuously until it either exceeds the context window and causes an error, or silently gets truncated and the model loses important context. Neither outcome is good.
+
+There are three practical strategies, and the right choice depends on your use case:
+
+<CardGroup cols={3}>
+  <Card title="Message Summarization" icon="file-lines" href="#lesson-3-context-window-management-is-non-trivial">
+    Periodically summarize early messages in the conversation into a compact
+    summary, then replace them. Preserves semantic meaning while reducing
+    tokens. Best for long-running conversations.
+  </Card>
+  <Card title="Sliding Window" icon="window-restore" href="#lesson-3-context-window-management-is-non-trivial">
+    Keep only the last N messages. Simple to implement, but loses context from
+    earlier in the conversation. Works well when recency matters most.
+  </Card>
+  <Card title="Structured Memory" icon="database" href="#lesson-3-context-window-management-is-non-trivial">
+    Extract key facts from the conversation into a separate memory store (a
+    vector DB or key-value store). The agent retrieves relevant memories on
+    demand. Most powerful, most complex.
+  </Card>
+</CardGroup>
+
+Here's the summarization approach wired into a LangGraph state:
+
+```python title="context_management.py"
+from langchain_core.messages import SystemMessage
+from langchain_openai import ChatOpenAI
+
+summarizer = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+
+async def summarize_history(messages: list, keep_last: int = 6) -> list:
+    """Summarize all but the last `keep_last` messages."""
+    if len(messages) <= keep_last:
+        return messages
+
+    to_summarize = messages[:-keep_last]
+    recent = messages[-keep_last:]
+
+    summary_response = await summarizer.ainvoke([
+        SystemMessage(content="Summarize the following conversation history concisely."),
+        *to_summarize
+    ])
+
+    summary_message = SystemMessage(
+        content=f"[Earlier conversation summary]: {summary_response.content}"
+    )
+    return [summary_message] + recent
+```
+
+---
+
+## Lesson 4: Streaming Is Not Optional for Voice
+
+I built a voice interface with batch LLM responses first. It felt broken. Users would ask a question, hear silence for three seconds, then get the full answer. Even when the answer was good, the experience was bad.
+
+Batch LLM responses are fundamentally incompatible with voice interfaces — users expect sub-second responsiveness, and the perceived latency of waiting for a complete response before any audio plays is jarring.
+
+The right architecture for voice pipelines, built in from the start:
+
+<Steps>
+  <Step title="Stream from the LLM">
+    Use `astream` to start receiving tokens as soon as the model begins
+    generating. Don't wait for the full response.
+  </Step>
+  <Step title="Sentence-split the stream">
+    Buffer tokens until you have a complete sentence (detect `.`, `?`, `!`
+    followed by whitespace). This gives TTS a coherent unit to synthesize.
+  </Step>
+  <Step title="Stream to TTS">
+    Send each complete sentence to your TTS provider immediately. ElevenLabs
+    and Cartesia both support streaming synthesis.
+  </Step>
+  <Step title="Play while generating">
+    Begin audio playback as soon as the first sentence is synthesized. The user
+    hears the response starting within ~500ms of the LLM beginning to generate.
+  </Step>
+</Steps>
+
+Adding streaming to a non-streaming architecture is painful. The async plumbing touches every layer. Build it streaming from day one.
+
+---
+
+## Lesson 5: LLM Costs Are a Product Problem
+
+Unchecked token usage kills SaaS unit economics. I've seen demos that looked profitable become loss-leaders the moment real users started multi-turn conversations with large context windows.
+
+The fixes aren't just engineering — they're product decisions:
+
+| Strategy | Impact | Complexity |
+|---|---|---|
+| Per-user token budgets | High | Low |
+| Model routing by query complexity | High | Medium |
+| Response caching (semantic) | Medium–High | Medium |
+| Prompt compression | Medium | Medium |
+| Context window limits | High | Low |
+
+Track **cost per conversation**, not just cost per request. A user who sends 20 short messages costs 10x more than a user who sends 2 long ones — per-request metrics hide this completely.
+
+<Info>
+  LiteLLM's proxy has built-in per-user budget tracking and model routing. If
+  you're running multiple models in production, it's worth the setup time.
+</Info>
+
+---
+
+## Lesson 6: Observability Is Your Debugger
+
+Debugging non-deterministic AI behavior without traces is like debugging a race condition without logs — technically possible, mostly miserable. LangSmith tracing saved me hours on every multi-agent debugging session I've done.
+
+At minimum, log for every LLM call:
+
+- **Inputs** — the exact prompt and messages sent
+- **Outputs** — the raw model response before any parsing
+- **Tool calls** — name, inputs, and outputs for every tool invocation
+- **Latency** — per-step and end-to-end timing
+- **Token counts** — prompt tokens, completion tokens, total cost
+
+```python title="langsmith_setup.py"
+import os
+from langsmith import Client
+
+# Enable tracing via environment variables
+os.environ["LANGCHAIN_TRACING_V2"] = "true"
+os.environ["LANGCHAIN_API_KEY"] = "your-api-key"
+os.environ["LANGCHAIN_PROJECT"] = "your-project-name"
+
+# All LangChain/LangGraph calls are now automatically traced
+# No code changes required in your agent logic
+client = Client()
+```
+
+Without traces, you're guessing. With traces, you can see exactly which tool call returned bad data, which prompt caused the model to go off-track, and where latency is actually being spent.
+
+---
+
+## What I'd Do Differently
+
+<AccordionGroup>
+  <Accordion title="Build evals on day one, not week six">
+    Every project I've shipped would have moved faster if I'd built even a small
+    evaluation dataset before writing the first line of agent code. Evals aren't
+    overhead — they're the feedback loop that makes everything else faster. Start
+    with 20 examples. Grow from there. Never ship without them.
+  </Accordion>
+
+  <Accordion title="Use LangGraph from the start for anything agent-shaped">
+    I built two production agents with vanilla LangChain before switching to
+    LangGraph. The migration was painful. LangGraph's explicit state management,
+    checkpointing, and conditional edges solve problems that you *will* encounter
+    in production, and retrofitting them is harder than starting with them.
+  </Accordion>
+
+  <Accordion title="Treat prompts as versioned artifacts">
+    Early on I edited system prompts in place and lost track of what changed and
+    when. Prompts should live in version control, have named versions, and changes
+    should be tied to eval results. LangSmith's prompt hub or even a simple YAML
+    file in your repo is infinitely better than editing strings in code.
+  </Accordion>
+
+  <Accordion title="Design for graceful degradation from the beginning">
+    LLMs fail, APIs go down, rate limits get hit. I didn't build fallback paths
+    early enough and paid for it in incident response. Every AI feature should
+    have a defined behavior for when the model is unavailable — whether that's a
+    cached response, a simpler fallback model, or a clear error message to the
+    user.
+  </Accordion>
+</AccordionGroup>

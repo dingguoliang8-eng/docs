@@ -1,97 +1,98 @@
 ---
-title: "LLM Infrastructure: Serving and Scaling Language Models"
-sidebarTitle: "Overview"
-description: "Overview of LLM infrastructure decisions: managed APIs vs self-hosted inference, model selection, cost optimization, and observability patterns."
+title: "LLM 基础设施：语言模型服务与扩展"
+sidebarTitle: "概览"
+description: "LLM 基础设施决策概览：托管 API vs 自建推理、模型选型、成本优化与可观测性。"
 ---
+基础设施怎么选，会直接卡住成本、延迟和质量。多模型路由、上下文管理、要不要自托管——早期决策往往就是系统上限。
 
-LLM infrastructure decisions have a massive impact on cost, latency, and quality. Whether you're routing queries across multiple models, managing context windows at scale, or deciding whether to self-host, the choices you make early define your system's ceiling — this section covers the decisions that matter most in production.
+## 托管 API 还是自托管
 
-## Managed API vs Self-Hosted
-
-Choosing between a managed API and self-hosted inference is the first architectural fork in any LLM system. Neither is universally better — the right answer depends on your constraints.
+这是第一个分叉。没有标准答案，看约束。
 
 <CardGroup cols={2}>
-  <Card title="Managed APIs" icon="cloud" href="https://platform.openai.com/docs">
-    **Providers:** OpenAI, Anthropic, Google Vertex AI
+  <Card title="托管 API" icon="cloud">
+    **提供商：** OpenAI、Anthropic、Google Vertex AI
 
-    - Fastest path to production — no infra to manage
-    - Access to the latest frontier models on day one
-    - Scales automatically with demand
-    - **Trade-offs:** Data leaves your infrastructure, expensive at high volume, limited customization, subject to provider rate limits
+    - 最快上线路径——无需自管基础设施
+    - 第一天即可使用最新前沿模型
+    - 随需求自动扩展
+    - **权衡：** 数据离开你的基础设施、高流量时昂贵、定制有限、受提供商限流约束
   </Card>
-  <Card title="Self-Hosted Inference" icon="server" href="/llm-infra/deployment">
-    **Tools:** vLLM, Ollama, Text Generation Inference (TGI)
 
-    - Full control over data — stays in your VPC or on-prem
-    - Significant cost reduction at scale (pay for compute, not per token)
-    - Tune serving parameters for your traffic patterns
-    - **Trade-offs:** Ops overhead, GPU procurement, model management, your team owns reliability
+  <Card title="自托管推理" icon="server">
+    **工具：** vLLM、Ollama、Text Generation Inference (TGI)
+
+    - 完全控制数据——留在 VPC 或本地
+    - 规模化后显著降本（为算力付费，而非按 Token）
+    - 可按流量模式调优服务参数
+    - **权衡：** 运维开销、GPU 采购、模型管理、可靠性由你的团队负责
   </Card>
 </CardGroup>
 
-### Decision Framework
+### 决策框架
 
-Use this checklist to guide your decision:
+可用此清单指导决策：
 
-- **Data sensitivity** — Does your use case involve PII, PHI, or confidential IP? Self-hosted or private cloud deployments are often required for compliance.
-- **Scale** — At low request volume, managed APIs are almost always cheaper when you factor in engineering time. Above a certain token volume, self-hosted GPU compute wins on unit economics.
-- **Latency requirements** — Managed APIs have network round-trip overhead. A self-hosted model on the same network as your application can be meaningfully faster.
-- **Team capacity** — Running GPU inference infrastructure requires MLOps expertise. Don't underestimate the operational burden if your team hasn't done it before.
+- **数据敏感度** — 是否涉及 PII、PHI 或机密 IP？合规常要求自托管或私有云部署。
+- **规模** — 低请求量时，算上工程时间，托管 API 几乎总是更便宜。超过一定 Token 量后，自托管 GPU 在单位经济上更优。
+- **延迟要求** — 托管 API 有网络往返开销。与应用同网的自托管模型可明显更快。
+- **团队能力** — 跑 GPU 推理需要 MLOps 经验。若团队没做过，不要低估运维负担。
 
 <Tip>
-  A common production pattern is to use managed APIs for early-stage products and frontier-model tasks, while running open-source models on your own infrastructure for high-volume, lower-complexity workloads.
+  常见生产模式：早期产品与前沿模型任务用托管 API，高流量、低复杂度工作负载则在自有基础设施上跑开源模型。
 </Tip>
 
-## Model Selection
+## 模型选型
 
-Not every task needs a frontier model. Matching model capability to task complexity is one of the highest-leverage cost and latency optimizations available to you.
+并非每个任务都需要前沿模型。按任务复杂度匹配模型能力，是成本与延迟优化中杠杆最高的手段之一。
 
-### Frontier Models
+### 前沿模型
 
-| Model | Provider | Best For |
-|---|---|---|
-| GPT-4o | OpenAI | Complex reasoning, multimodal tasks, agentic workflows |
-| Claude 3.5 Sonnet | Anthropic | Long-context analysis, coding, nuanced instruction following |
-| Gemini 1.5 Pro | Google | Very long context windows (1M tokens), multimodal |
+| 模型 | 提供商 | 最适合 |
+| --- | --- | --- |
+| GPT-4o | OpenAI | 复杂推理、多模态任务、Agent 工作流 |
+| Claude 3.5 Sonnet | Anthropic | 长上下文分析、编程、细腻指令遵循 |
+| Gemini 1.5 Pro | Google | 超长上下文（1M tokens）、多模态 |
 
-Frontier models offer the best quality across nearly all benchmarks. Reserve them for tasks where quality directly affects user outcomes or business value.
+前沿模型在几乎所有基准上质量最好。留给质量直接影响用户结果或业务价值的任务。
 
-### Mid-Tier Models
+### 中档模型
 
-| Model | Provider | Best For |
-|---|---|---|
-| GPT-4o-mini | OpenAI | Classification, extraction, summarization at scale |
-| Claude 3.5 Haiku | Anthropic | Fast, cheap responses with strong instruction following |
-| Gemini 1.5 Flash | Google | Low-latency, high-throughput applications |
+| 模型 | 提供商 | 最适合 |
+| --- | --- | --- |
+| GPT-4o-mini | OpenAI | 大规模分类、抽取、摘要 |
+| Claude 3.5 Haiku | Anthropic | 快速、便宜且指令遵循强的回复 |
+| Gemini 1.5 Flash | Google | 低延迟、高吞吐应用 |
 
-Mid-tier models offer an excellent quality-to-cost ratio. For many production workloads, they're indistinguishable from frontier models in perceived output quality.
+中档模型质量/成本比优秀。许多生产负载在感知输出质量上与前沿模型难分伯仲。
 
-### Open-Source Models
+### 开源模型
 
-| Model | Parameters | Best For |
-|---|---|---|
-| Llama 3.1 / 3.2 | 3B–405B | General-purpose, fine-tuning, on-prem deployment |
-| Qwen2.5 | 0.5B–72B | Strong multilingual and coding performance |
-| Mistral / Mixtral | 7B–8x22B | Efficient inference, European data residency |
+| 模型 | 参数量 | 最适合 |
+| --- | --- | --- |
+| Llama 3.1 / 3.2 | 3B–405B | 通用、微调、本地部署 |
+| Qwen2.5 | 0.5B–72B | 强多语言与编程表现 |
+| Mistral / Mixtral | 7B–8x22B | 高效推理、欧洲数据驻留 |
 
-Open-source models are self-hostable and can be fine-tuned on your domain data. At the 70B+ scale, they approach frontier model quality on many tasks.
+开源模型可自托管，并可在你的领域数据上微调。在 70B\+ 规模，许多任务上接近前沿模型质量。
 
-### Specialized Models
+### 专用模型
 
 <CardGroup cols={2}>
-  <Card title="Code Generation" icon="code" href="https://huggingface.co/deepseek-ai/DeepSeek-Coder-V2-Instruct">
-    **DeepSeek Coder V2** and **Qwen2.5-Coder** outperform general-purpose models on code completion, debugging, and test generation — at a fraction of the cost of GPT-4o for coding tasks.
+  <Card title="代码生成" icon="code">
+    **DeepSeek Coder V2** 与 **Qwen2.5-Coder** 在补全、调试与测试生成上优于通用模型——编码任务成本远低于 GPT-4o。
   </Card>
-  <Card title="Reasoning" icon="brain" href="https://huggingface.co/Qwen/QwQ-32B-Preview">
-    **QwQ-32B** and **o1-mini** excel at multi-step reasoning, math, and logic problems where chain-of-thought processing matters more than raw generation speed.
+
+  <Card title="推理" icon="brain">
+    **QwQ-32B** 与 **o1-mini** 擅长多步推理、数学与逻辑问题——链式思考比原始生成速度更重要。
   </Card>
 </CardGroup>
 
-## Cost Optimization Strategies
+## 成本优化策略
 
-### Route Queries by Complexity
+### 按复杂度路由查询
 
-The single most impactful cost optimization is avoiding expensive models for simple tasks. A classification or keyword extraction task doesn't need GPT-4o — it needs the cheapest model that produces a reliable result.
+影响最大的成本优化是：简单任务不要用昂贵模型。分类或关键词抽取不需要 GPT-4o——需要的是能稳定出结果的最便宜模型。
 
 ```python title="LLM Router Pattern"
 from openai import OpenAI
@@ -143,123 +144,37 @@ def routed_completion(query: str) -> str:
     return response.choices[0].message.content
 ```
 
-### Cache LLM Responses
+### 缓存 LLM 响应
 
-Semantic caching uses vector similarity to return cached responses for queries that are semantically equivalent — even if the exact wording differs. This is especially effective for FAQ-style applications and documentation chatbots.
+语义缓存用向量相似度，对语义等价（即便措辞不同）的查询返回缓存响应。对 FAQ 类应用与文档聊天机器人尤其有效。
 
 <Info>
-  Tools like **GPTCache** and **Qdrant** make semantic caching straightforward to implement. A cache hit rate of 20–30% is common in production chatbots, which translates directly to cost savings.
+  **GPTCache** 与 **Qdrant** 等工具让语义缓存易于实现。生产聊天机器人常见 20–30% 命中率，直接转化为成本节约。
 </Info>
 
-### Manage Context Windows
+### 管理上下文窗口
 
-Every token in your prompt costs money. Strategies to reduce prompt size:
+提示中的每个 Token 都花钱。缩小提示的策略：
 
-- **Summarize conversation history** rather than passing the full transcript
-- **Retrieve only the most relevant chunks** in RAG pipelines — don't pad with extra context
-- **Use prompt compression tools** like LLMLingua to reduce prompt token count with minimal quality loss
-- **Set `max_tokens` explicitly** to avoid runaway completions on simple tasks
+- **摘要对话历史**，而非传入完整转录
+- **在 RAG 中只检索最相关块**——不要用额外上下文填充
+- **使用提示压缩工具**（如 LLMLingua），在尽量少损质量的前提下减少 Token
+- **显式设置 `max_tokens`**，避免简单任务生成失控
 
-### Use Streaming
+### 使用流式输出
 
-Streaming doesn't reduce your token cost, but it dramatically improves perceived latency — the first token appears almost immediately rather than waiting for the full response. For user-facing applications, streaming is almost always worth implementing.
-
----
-
-## Multi-Provider Routing with LiteLLM
-
-[LiteLLM](https://github.com/BerriAI/litellm) provides a unified OpenAI-compatible interface over 100+ LLM providers. Instead of maintaining separate client code for OpenAI, Anthropic, Gemini, and your self-hosted vLLM endpoints, LiteLLM normalizes them all behind a single API — and adds routing, fallback, and load-balancing logic on top.
-
-### Why LiteLLM Matters
-
-- **Provider portability** — swap providers by changing a model string, not your application code
-- **Automatic fallbacks** — if your primary provider hits a rate limit or goes down, LiteLLM retries against a backup model automatically
-- **Cost tracking** — unified spend tracking across all providers in one dashboard
-- **Load balancing** — distribute traffic across multiple deployments of the same model (useful for high-throughput self-hosted setups)
-
-### YAML Router Configuration
-
-```yaml title="litellm_config.yaml"
-model_list:
-  # Primary: frontier model for complex tasks
-  - model_name: gpt-4o
-    litellm_params:
-      model: openai/gpt-4o
-      api_key: os.environ/OPENAI_API_KEY
-
-  # Fallback: mid-tier model for cost savings
-  - model_name: gpt-4o-mini
-    litellm_params:
-      model: openai/gpt-4o-mini
-      api_key: os.environ/OPENAI_API_KEY
-
-  # Anthropic alternative
-  - model_name: claude-sonnet
-    litellm_params:
-      model: anthropic/claude-3-5-sonnet-20241022
-      api_key: os.environ/ANTHROPIC_API_KEY
-
-  # Self-hosted vLLM endpoint
-  - model_name: qwen-local
-    litellm_params:
-      model: openai/Qwen/Qwen2.5-7B-Instruct
-      api_base: http://localhost:8000/v1
-      api_key: not-needed
-
-router_settings:
-  routing_strategy: least-busy
-  num_retries: 3
-  fallbacks:
-    - gpt-4o:
-        - claude-sonnet
-        - gpt-4o-mini
-```
-
-### Start the LiteLLM Proxy
-
-```bash title="Run LiteLLM Proxy Server"
-pip install litellm[proxy]
-litellm --config litellm_config.yaml --port 4000
-```
-
-Once running, point any OpenAI-compatible client at `http://localhost:4000` — the proxy handles provider selection, retries, and usage logging transparently.
-
-```python title="Call LiteLLM Proxy with OpenAI Client"
-from openai import OpenAI
-
-client = OpenAI(
-    base_url="http://localhost:4000",
-    api_key="your-litellm-master-key",
-)
-
-response = client.chat.completions.create(
-    model="gpt-4o",          # Routes to best available provider
-    messages=[{"role": "user", "content": "Summarize this document."}],
-)
-print(response.choices[0].message.content)
-```
-
-<Tip>
-  LiteLLM's fallback configuration is one of the most practical reliability improvements you can add to an LLM product. A primary → fallback chain like `gpt-4o → claude-3-5-sonnet → gpt-4o-mini` gives you resilience against provider outages with no changes to application code.
-</Tip>
+流式不会降低 Token 成本，但能显著改善感知延迟——首 Token 几乎立刻出现，而不必等完整响应。面向用户的应用几乎总值得实现流式。
 
 ---
 
-## Explore Further
+## 继续探索
 
 <CardGroup cols={2}>
-  <Card
-    title="Deployment"
-    icon="rocket"
-    href="/llm-infra/deployment"
-  >
-    Set up vLLM for production GPU inference and Ollama for local development, with observability and optimization tips.
+  <Card title="部署" icon="rocket" href="/llm-infra/deployment">
+    配置生产 GPU 推理用的 vLLM 与本地开发用的 Ollama，以及可观测性与优化建议。
   </Card>
-  <Card
-    title="SaaS Architecture"
-    icon="building"
-    href="/llm-infra/saas-architecture"
-  >
-    Design patterns for multi-tenant AI products: tenant isolation, per-tenant RAG, rate limiting, and cost attribution.
+
+  <Card title="SaaS 架构" icon="building" href="/llm-infra/saas-architecture">
+    多租户 AI 产品设计模式：租户隔离、按租户 RAG、限流与成本归因。
   </Card>
 </CardGroup>

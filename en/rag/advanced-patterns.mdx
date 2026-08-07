@@ -1,0 +1,321 @@
+---
+title: "Advanced RAG Patterns: HyDE, Self-RAG, CRAG, and More"
+sidebarTitle: "Advanced Patterns"
+description: "Production RAG patterns: query rewriting, HyDE, parent-child retrieval, multi-vector indexing, Self-RAG, and corrective RAG implementations."
+---
+Naive RAG — embed query, retrieve top-K, generate — breaks down quickly in production. Real user queries are ambiguous, under-specified, or assume context the retriever doesn't have. Retrieved chunks may be technically relevant but lacking the surrounding context the LLM needs. And sometimes, your vector index simply doesn't have a good answer. The patterns in this guide address the most common production failure modes, ranked roughly from simplest to most complex.
+
+<Tip>
+  Start with the simplest possible RAG pipeline and measure it rigorously before adding complexity. Each pattern below solves a specific, measurable problem. Add them only where your evaluation metrics show a gap — complexity has a real maintenance cost.
+</Tip>
+
+## Query Transformation
+
+The single biggest source of retrieval failure is the **vocabulary mismatch** between how users phrase questions and how documents are written. Query transformation rewrites or expands the query before retrieval.
+
+### 1. Query Rewriting
+
+A lightweight LLM call rewrites the user's conversational query into a form better suited for vector search — removing pronouns that reference conversation history, expanding abbreviations, and adding relevant context.
+
+```python title="query_rewriting.py"
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_openai import ChatOpenAI
+
+rewrite_prompt = ChatPromptTemplate.from_template(
+    """Rewrite the following user question into a concise, self-contained search query
+    optimized for semantic document retrieval. Remove conversational filler. 
+    Expand abbreviations. Output only the rewritten query, nothing else.
+    
+    Original question: {question}
+    Rewritten query:"""
+)
+
+llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+rewrite_chain = rewrite_prompt | llm
+
+rewritten = rewrite_chain.invoke({"question": "what about the cancellation thing?"})
+results = vectorstore.similarity_search(rewritten.content, k=10)
+```
+
+### 2. HyDE (Hypothetical Document Embeddings)
+
+HyDE inverts the retrieval problem. Instead of embedding a short query and hoping it matches long document chunks, you ask the LLM to **generate a hypothetical document** that would answer the question, then embed that longer, richer text to retrieve real documents. Hypothetical documents embed much closer to real documents than raw questions do.
+
+```python title="hyde.py"
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_openai import ChatOpenAI
+
+hyde_prompt = ChatPromptTemplate.from_template(
+    "Write a hypothetical document that would answer: {question}"
+)
+
+llm = ChatOpenAI(model="gpt-4o-mini")
+hyde_chain = hyde_prompt | llm
+
+hypothetical_doc = hyde_chain.invoke({"question": user_query})
+results = vectorstore.similarity_search(hypothetical_doc.content, k=5)
+```
+
+<Note>
+  HyDE works best when your corpus consists of long-form documents (articles, reports, documentation). It is less effective when queries are already very specific or when the corpus is short and homogeneous.
+</Note>
+
+### 3. Multi-Query Retrieval
+
+Generate N semantically distinct variants of the original query, run retrieval for each, then deduplicate by document ID. This improves recall for ambiguous queries where a single formulation might miss relevant perspectives.
+
+```python title="multi_query.py"
+from langchain.retrievers.multi_query import MultiQueryRetriever
+from langchain_openai import ChatOpenAI
+
+llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.3)
+
+multi_query_retriever = MultiQueryRetriever.from_llm(
+    retriever=vectorstore.as_retriever(search_kwargs={"k": 10}),
+    llm=llm
+)
+
+# Automatically generates 3 query variants and deduplicates results
+results = multi_query_retriever.invoke("How do I reset my subscription?")
+```
+
+## Hierarchical / Parent-Child Retrieval
+
+A fundamental tension in chunking: **small chunks** embed well and retrieve precisely, but lack the surrounding context the LLM needs to generate a complete answer. **Large chunks** provide rich context but embed poorly because their vectors average over too much content.
+
+Parent-child retrieval resolves this: index small child chunks for retrieval precision, but return their larger parent chunks to the LLM for generation context.
+
+```python title="parent_child_retrieval.py"
+from langchain.retrievers import ParentDocumentRetriever
+from langchain.storage import InMemoryStore
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+# Docstore holds the full parent chunks in memory (use Redis for production)
+store = InMemoryStore()
+
+retriever = ParentDocumentRetriever(
+    vectorstore=vectorstore,
+    docstore=store,
+    # Small chunks are embedded and used for retrieval
+    child_splitter=RecursiveCharacterTextSplitter(chunk_size=200),
+    # Large chunks are returned to the LLM
+    parent_splitter=RecursiveCharacterTextSplitter(chunk_size=2000),
+)
+
+# Indexing — stores both child vectors and parent documents
+retriever.add_documents(documents)
+
+# Querying — retrieves via child chunks, returns parent content
+results = retriever.invoke("Explain the authentication flow")
+```
+
+<Info>
+  For production use, replace `InMemoryStore` with a persistent store like Redis or a key-value table in your database. `InMemoryStore` is lost on process restart.
+</Info>
+
+## Self-RAG and Corrective RAG
+
+These patterns add a **feedback loop** to the RAG pipeline: the system critiques its own intermediate results and adjusts behavior accordingly.
+
+<Accordion title="Self-RAG">
+  Self-RAG teaches the LLM to explicitly decide at each step whether retrieval is needed, assess whether retrieved documents are actually relevant, and critique its own generated output for faithfulness.
+
+  The LLM generates special reflection tokens:
+  - `[Retrieve]` / `[No Retrieve]` — should I retrieve?
+  - `[Relevant]` / `[Irrelevant]` — are these docs useful?
+  - `[Fully Supported]` / `[Partially Supported]` / `[No Support]` — is my answer grounded?
+
+  In practice, implement Self-RAG as a **LangGraph** workflow where each reflection token triggers a conditional edge to the appropriate next node.
+
+  ```python title="self_rag_graph.py"
+  from langgraph.graph import StateGraph, END
+  from typing import TypedDict, List
+
+  class RAGState(TypedDict):
+      question: str
+      documents: List[str]
+      generation: str
+      needs_retrieval: bool
+      docs_relevant: bool
+      generation_grounded: bool
+
+  def decide_retrieval(state: RAGState) -> RAGState:
+      """LLM decides if retrieval is needed for this query."""
+      # ... LLM call with retrieval decision prompt
+      return state
+
+  def retrieve(state: RAGState) -> RAGState:
+      """Retrieve documents from vector store."""
+      # ... retrieval logic
+      return state
+
+  def grade_documents(state: RAGState) -> RAGState:
+      """Grade each retrieved document for relevance."""
+      # ... LLM-as-judge relevance scoring
+      return state
+
+  def generate(state: RAGState) -> RAGState:
+      """Generate answer from relevant documents."""
+      # ... generation with grounding
+      return state
+
+  def grade_generation(state: RAGState) -> RAGState:
+      """Check if generation is supported by documents."""
+      # ... faithfulness check
+      return state
+
+  workflow = StateGraph(RAGState)
+  workflow.add_node("decide_retrieval", decide_retrieval)
+  workflow.add_node("retrieve", retrieve)
+  workflow.add_node("grade_documents", grade_documents)
+  workflow.add_node("generate", generate)
+  workflow.add_node("grade_generation", grade_generation)
+  # ... add conditional edges based on state flags
+  ```
+
+  See the [LangGraph guide](/en/agents/langgraph) for the complete workflow implementation.
+</Accordion>
+
+<Accordion title="Corrective RAG (CRAG)">
+  CRAG adds a retrieval quality gate. If the grader determines that retrieved documents are not relevant enough to answer the question, CRAG **falls back to web search** rather than generating a hallucinated response from poor context.
+
+  ```python title="crag_fallback.py"
+  from langchain_community.tools.tavily_search import TavilySearchResults
+  from langchain_openai import ChatOpenAI
+
+  web_search = TavilySearchResults(max_results=3)
+  grader_llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+
+  def retrieval_grader(question: str, documents: list) -> str:
+      """Returns 'relevant' or 'not relevant'."""
+      grader_prompt = f"""Is the following document relevant to answering this question?
+      Question: {question}
+      Document: {documents[0].page_content}
+      Answer with only 'relevant' or 'not relevant'."""
+      result = grader_llm.invoke(grader_prompt)
+      return result.content.strip().lower()
+
+  def crag_retrieve(question: str) -> list:
+      """Retrieve from vector store; fall back to web search if irrelevant."""
+      docs = vectorstore.similarity_search(question, k=5)
+      grade = retrieval_grader(question, docs)
+
+      if grade == "not relevant":
+          print("Vector store docs irrelevant — falling back to web search")
+          web_results = web_search.invoke(question)
+          return web_results
+
+      return docs
+  ```
+</Accordion>
+
+## Contextual Compression
+
+Even relevant chunks contain sentences that don't directly address the query — boilerplate, tangential detail, formatting artifacts. Contextual compression extracts only the portions of each chunk that are directly pertinent, reducing noise in the LLM's context window.
+
+```python title="contextual_compression.py"
+from langchain.retrievers import ContextualCompressionRetriever
+from langchain.retrievers.document_compressors import LLMChainExtractor
+from langchain_openai import ChatOpenAI
+
+llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+
+# Extracts only the relevant sentences from each retrieved chunk
+compressor = LLMChainExtractor.from_llm(llm)
+
+compression_retriever = ContextualCompressionRetriever(
+    base_compressor=compressor,
+    base_retriever=vectorstore.as_retriever(search_kwargs={"k": 10})
+)
+
+compressed_docs = compression_retriever.invoke("What are the storage limits?")
+# Each document now contains only the sentences relevant to the query
+```
+
+<Note>
+  Contextual compression adds an LLM call per retrieved document. Use it selectively — pair it with a fast, cheap model like `gpt-4o-mini` and apply it only after a reranking pass has already filtered your candidates to the top 5–10.
+</Note>
+
+## Multi-Vector Indexing
+
+Instead of indexing only the raw text of each document, you can index **multiple vector representations** of the same source document. This dramatically improves retrieval for queries that match the document's essence rather than its exact wording.
+
+<Steps>
+  <Step title="Generate Summaries">
+    Summarize each document chunk with an LLM. Index the summary vector. When retrieved, return the original full chunk to the LLM.
+
+    ```python title="summary_indexing.py"
+    from langchain_openai import ChatOpenAI
+    import uuid
+
+    summarize_llm = ChatOpenAI(model="gpt-4o-mini")
+
+    for doc in documents:
+        doc_id = str(uuid.uuid4())
+        summary = summarize_llm.invoke(
+            f"Summarize the key points of this document in 2–3 sentences:\n\n{doc.page_content}"
+        )
+        # Index the summary but store and return the original
+        summary_doc = Document(
+            page_content=summary.content,
+            metadata={"doc_id": doc_id, "type": "summary"}
+        )
+        vectorstore.add_documents([summary_doc])
+        docstore.mset([(doc_id, doc)])  # Store original for retrieval
+    ```
+  </Step>
+  <Step title="Generate Hypothetical Questions">
+    For each document chunk, generate the questions it could answer. Index those questions. A user's real question will often match a hypothetical question more precisely than the document text.
+
+    ```python title="hypothetical_questions.py"
+    question_gen_prompt = """Generate 3 specific questions that this document answers.
+    Output only the questions, one per line.
+    
+    Document: {doc}"""
+
+    questions_response = summarize_llm.invoke(
+        question_gen_prompt.format(doc=doc.page_content)
+    )
+    questions = questions_response.content.strip().split("\n")
+
+    for question in questions:
+        q_doc = Document(
+            page_content=question,
+            metadata={"doc_id": doc_id, "type": "hypothetical_question"}
+        )
+        vectorstore.add_documents([q_doc])
+    ```
+  </Step>
+  <Step title="Extract Structured Facts">
+    For structured documents (product specs, pricing tables, policy documents), extract discrete facts as key-value pairs and index each fact separately for high-precision retrieval.
+  </Step>
+</Steps>
+
+## Putting It All Together
+
+Production RAG systems layer these patterns selectively. A reasonable starting architecture for a knowledge-base Q&A system:
+
+<Steps>
+  <Step title="Query Rewriting">
+    Rewrite the user query to be self-contained and retrieval-optimized.
+  </Step>
+  <Step title="Hybrid Retrieval">
+    Run dense + sparse (BM25) retrieval and merge with RRF. Fetch 20–50 candidates.
+  </Step>
+  <Step title="Reranking">
+    Apply Cohere Rerank or BGE reranker to reduce to 5–10 high-precision candidates.
+  </Step>
+  <Step title="Contextual Compression (Optional)">
+    Strip irrelevant sentences from each candidate chunk.
+  </Step>
+  <Step title="Generation with Grounding">
+    Pass the compressed context to your LLM with an explicit instruction to cite sources and refuse to answer if the context is insufficient.
+  </Step>
+  <Step title="Faithfulness Check (Optional)">
+    For high-stakes domains, run a post-generation faithfulness check against the retrieved context before returning the answer to the user.
+  </Step>
+</Steps>
+
+<Warning>
+  Measure your baseline (naive RAG) before adding any of these patterns. Each additional step adds latency, cost, and failure modes. The goal is the simplest system that meets your accuracy requirements — not the most sophisticated one.
+</Warning>

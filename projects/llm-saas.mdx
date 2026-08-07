@@ -1,205 +1,37 @@
 ---
-title: "LLM SaaS Product: Multi-Tenant AI Chat Platform"
+title: "LLM SaaS 产品：多租户 AI 聊天平台"
 sidebarTitle: "LLM SaaS"
-description: "Architecture and implementation of a multi-tenant AI SaaS with per-tenant RAG, model routing by plan tier, usage tracking, and streaming chat."
+description: "多租户 AI SaaS：按租户 RAG、按套餐模型路由、用量统计与流式聊天。"
 ---
+这是一个 B2B AI SaaS：企业可部署基于自有文档的品牌助手。**多租户从第一天就是核心**，不是后来补的——库表、向量库、鉴权中间件都按「成百上千租户共享基础设施但仍隔离」来设计。
 
-This project is a B2B AI SaaS product I built allowing companies to deploy branded AI assistants trained on their own documents — multi-tenancy was a core requirement from day one, not a feature added later. Every design decision, from the database schema to the vector store layout to the authentication middleware, was made with the assumption that hundreds of isolated tenants would be sharing the same infrastructure.
+## 产品形态
 
-## Product Overview
+- Starter：小模型、有限 Token/文档
+- Pro：更强模型、更高额度
+- Enterprise：可接专用推理（如自建 vLLM）、更高定制
 
-<CardGroup cols={3}>
-  <Card title="Starter Plan" icon="seedling" href="#product-overview">
-    **GPT-4o-mini** inference, 100K tokens/month, up to 500 documents indexed. Designed for small teams evaluating the product.
-  </Card>
-  <Card title="Pro Plan" icon="star" href="#product-overview">
-    **GPT-4o** inference, 1M tokens/month, up to 10K documents indexed. For teams running the assistant as a core workflow tool.
-  </Card>
-  <Card title="Enterprise Plan" icon="building" href="#product-overview">
-    **Dedicated vLLM inference** (Qwen 2.5-72B or Llama 3.3-70B), unlimited tokens, unlimited documents, custom deployment options.
-  </Card>
-</CardGroup>
+每租户独立知识库、系统提示、配额和品牌聊天入口。数据不混：库、向量、缓存都不混。
 
-Each tenant gets a fully isolated environment: their own knowledge base, their own system prompt, their own usage quota, and a branded chat interface at `{tenant_slug}.app.example.com`. Tenant data never mixes — not in the database, not in the vector store, not in the cache.
+## 分层
 
-<Info>
-  At the time of writing, the platform serves approximately **200+ tenants**, ranging from 1-person startups to enterprise teams with thousands of users. The multi-tenant architecture has scaled horizontally without significant rearchitecting since launch.
-</Info>
+1. FastAPI \+ 租户解析中间件（JWT → 租户配置，Redis 缓存）
+2. LangGraph Agent（租户 RAG 当工具，Postgres checkpoint）
+3. 每租户独立 Qdrant collection（`tenant_{id}_docs`，集合级隔离）
+4. LiteLLM 统一路由（按套餐选模型，应用层不直接绑厂商）
+5. PostgreSQL \+ Redis \+ Qdrant
+6. Celery 异步入库；完成用 WebSocket 通知
 
-## Technical Architecture
+聊天用 SSE 流式输出；注意负载均衡超时和并发连接。
 
-The system is organized into six layers, each with a clearly bounded responsibility.
+## 入库
 
-<Steps>
-  <Step title="API Layer">
-    **FastAPI** handles all HTTP traffic. Every request passes through a tenant resolution middleware that extracts the tenant from the JWT, loads the tenant's config from a Redis-cached PostgreSQL query, and attaches it to the request context. No request reaches a handler without a fully resolved tenant object.
-  </Step>
-  <Step title="Orchestration Layer">
-    A **LangGraph agent** is instantiated per conversation thread. The agent has access to the tenant's RAG retriever as a tool and uses the tenant's configured system prompt. Thread state is checkpointed to PostgreSQL so conversations are resumable across sessions and server restarts.
-  </Step>
-  <Step title="RAG Layer">
-    Each tenant has a **dedicated Qdrant collection** named `tenant_{tenant_id}_docs`. Isolation is enforced at the collection level, not the filter level — a misconfigured filter cannot leak data between tenants. BGE-M3 embeddings with hybrid retrieval, same architecture as the [RAG Pipeline project](/projects/rag-pipeline).
-  </Step>
-  <Step title="Inference Layer">
-    **LiteLLM proxy** provides a unified OpenAI-compatible interface across all model providers. The orchestration layer never calls OpenAI or vLLM directly — it calls LiteLLM with a model name, and LiteLLM routes to the right provider based on the tenant's plan tier.
-  </Step>
-  <Step title="Storage Layer">
-    **PostgreSQL** for all relational data: tenants, users, conversations, usage records, and LangGraph checkpoints. **Redis** for session caching, rate limit counters, and as the Celery broker. Qdrant for vectors. No other data stores.
-  </Step>
-  <Step title="Background Workers">
-    **Celery workers** handle all document indexing asynchronously. When a document upload completes, a Celery task is queued to parse, chunk, embed, and upsert to Qdrant. The tenant is notified via WebSocket when indexing completes.
-  </Step>
-</Steps>
+直传对象存储 → webhook 入队 → 解析/分块/嵌入/写入租户 collection → 更新状态并通知前端。
 
-## LiteLLM Proxy for Model Routing
+## 结果（生产观测口径）
 
-LiteLLM is the right abstraction layer for multi-provider routing in a SaaS product. Instead of scattering provider-specific client code throughout the codebase, I deploy a single LiteLLM proxy instance that exposes a unified OpenAI-compatible API. The orchestration layer doesn't know or care which provider is serving a given request.
-
-<Note>
-  LiteLLM's virtual key system also handles per-tenant budget enforcement and rate limiting at the proxy level — reducing the amount of quota management logic I need to maintain in the application layer.
-</Note>
-
-```yaml litellm_config.yaml
-model_list:
-  - model_name: starter-model
-    litellm_params:
-      model: gpt-4o-mini
-      api_key: os.environ/OPENAI_API_KEY
-
-  - model_name: pro-model
-    litellm_params:
-      model: gpt-4o
-      api_key: os.environ/OPENAI_API_KEY
-
-  - model_name: enterprise-model
-    litellm_params:
-      model: openai/qwen2.5-72b
-      api_base: http://vllm-server:8000/v1
-      api_key: not-needed
-
-router_settings:
-  routing_strategy: usage-based-routing
-
-general_settings:
-  master_key: os.environ/LITELLM_MASTER_KEY
-  database_url: os.environ/DATABASE_URL  # Usage logging to Postgres
-```
-
-Model selection happens in the tenant middleware — the tenant's plan tier maps to a LiteLLM model name, and that name is attached to the request context. The agent passes it as the `model` parameter when invoking LiteLLM.
-
-```python Tenant-Aware Model Selection
-PLAN_MODEL_MAP = {
-    "starter": "starter-model",
-    "pro": "pro-model",
-    "enterprise": "enterprise-model",
-}
-
-async def get_tenant(request: Request, token: str = Depends(oauth2_scheme)):
-    payload = verify_jwt(token)
-    tenant = await tenant_service.get_with_cache(payload["tenant_id"])
-    tenant.model_name = PLAN_MODEL_MAP[tenant.plan]
-    return tenant
-```
-
-## Streaming Chat with SSE
-
-Streaming is a hard requirement for a chat product — users won't wait 10 seconds for a full response to appear. I use FastAPI's `StreamingResponse` with Server-Sent Events, streaming LangGraph agent output token by token.
-
-```python Streaming Chat Endpoint
-from fastapi import FastAPI, Depends
-from fastapi.responses import StreamingResponse
-import json
-
-@app.post("/chat/stream")
-async def stream_chat(
-    request: ChatRequest,
-    tenant=Depends(get_tenant)
-):
-    graph = await get_agent_graph(
-        tenant_id=tenant.id,
-        model_name=tenant.model_name,
-        system_prompt=tenant.system_prompt
-    )
-
-    async def generate():
-        async for chunk in graph.astream(
-            {"messages": request.messages},
-            config={"configurable": {"thread_id": request.thread_id}}
-        ):
-            if "messages" in chunk:
-                last_msg = chunk["messages"][-1]
-                if hasattr(last_msg, "content") and last_msg.content:
-                    yield f"data: {json.dumps({'content': last_msg.content})}\n\n"
-        yield "data: [DONE]\n\n"
-
-    return StreamingResponse(generate(), media_type="text/event-stream")
-```
-
-<Warning>
-  SSE connections are long-lived HTTP connections. Make sure your load balancer (nginx, ALB) has proxy read timeouts configured to at least 120 seconds, and that your FastAPI worker concurrency model handles concurrent open connections without exhausting the thread pool. I use `uvicorn` with `--workers` set to match CPU count and async handlers throughout.
-</Warning>
-
-## Document Indexing Pipeline
-
-<Steps>
-  <Step title="Upload">
-    The client uploads a document via `POST /documents`. The API validates file type and size against the tenant's plan quota, generates a signed URL for direct upload to object storage (MinIO/S3-compatible), and returns the URL. The client uploads directly to object storage — the API server never handles the raw file bytes.
-  </Step>
-  <Step title="Task Queuing">
-    When object storage receives the upload, a webhook fires and the API enqueues a Celery task with the document metadata, then returns immediately.
-  </Step>
-  <Step title="Processing">
-    The Celery worker fetches the file from object storage, parses it with Unstructured.io, chunks with `RecursiveCharacterTextSplitter`, embeds with BGE-M3, and upserts to the tenant's Qdrant collection. The document record in PostgreSQL is updated with `status=indexed` and chunk count.
-  </Step>
-  <Step title="Notification">
-    On completion (or failure), the worker sends a WebSocket message to any connected clients for that tenant. The frontend updates the document status in real time without polling.
-  </Step>
-</Steps>
-
-```python Celery Indexing Task
-from celery import shared_task
-from app.services import document_service, vector_service, ws_manager
-
-@shared_task(bind=True, max_retries=3, default_retry_delay=60)
-def index_document(self, document_id: str, tenant_id: str):
-    try:
-        doc = document_service.get(document_id)
-        chunks = document_service.parse_and_chunk(doc)
-        vector_service.upsert_chunks(
-            collection=f"tenant_{tenant_id}_docs",
-            chunks=chunks,
-            document_id=document_id
-        )
-        document_service.mark_indexed(document_id, chunk_count=len(chunks))
-        ws_manager.notify_tenant(tenant_id, {
-            "type": "document_indexed",
-            "document_id": document_id,
-            "chunk_count": len(chunks)
-        })
-    except Exception as exc:
-        document_service.mark_failed(document_id, error=str(exc))
-        raise self.retry(exc=exc)
-```
-
-## Key Metrics and Results
-
-The numbers below reflect representative measurements taken in production over a six-month period.
-
-<CardGroup cols={2}>
-  <Card title="Tenants Onboarded" icon="users" href="#key-metrics-and-results">
-    Around **200+ tenants** across industries including legal, HR, customer support, and technical documentation.
-  </Card>
-  <Card title="First-Token Latency" icon="gauge-high" href="#key-metrics-and-results">
-    Approximately **320ms P95** to first streaming token, measured end-to-end from request receipt to first SSE event at the client.
-  </Card>
-  <Card title="Indexing Throughput" icon="file-arrow-up" href="#key-metrics-and-results">
-    Approximately **1,000 pages/minute** sustained indexing throughput with 4 Celery workers and BGE-M3 on a single A10G GPU.
-  </Card>
-  <Card title="Uptime" icon="circle-check" href="#key-metrics-and-results">
-    Around **99.2% uptime** over the first 6 months. Both incidents were infrastructure-level (PostgreSQL storage exhaustion and a Qdrant OOM) — not application bugs.
-  </Card>
-</CardGroup>
+约 200\+ 租户；首 Token P95 约 320ms；索引吞吐约 1000 页/分钟（给定 worker/GPU）；前 6 个月可用性约 99.2%，故障偏基础设施层。
 
 <Tip>
-  When building multi-tenant SaaS, enforce tenant isolation at the infrastructure layer (separate collections, separate schemas) rather than the application layer (row-level filters). Application-layer isolation can be defeated by a single buggy query; infrastructure-layer isolation cannot.
+  租户隔离尽量落在基础设施层（独立 collection/schema），别只靠应用层 filter——一条错查询就能打穿。
 </Tip>

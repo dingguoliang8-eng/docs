@@ -1,42 +1,41 @@
 ---
-title: "LangGraph: Stateful Agent Workflows with Graph Design"
+title: "LangGraph：用图设计构建有状态 Agent 工作流"
 sidebarTitle: "LangGraph"
-description: "Build stateful, cyclical agent workflows with LangGraph. Learn StateGraph, nodes, edges, conditional routing, and checkpointing patterns."
+description: "用 LangGraph 构建有状态、可循环的 Agent 工作流：StateGraph、节点、边、条件路由与 checkpoint。"
 ---
-
-LangGraph lets you build agent workflows as **explicit, stateful graphs** — a step beyond simple LLM chains. Where LangChain's LCEL chains are acyclic (input flows forward to output), LangGraph supports **cycles**: a node can route execution back to an earlier node, enabling the iterative loops that agents require. Built on top of LangChain, it gives you typed shared state, deterministic control flow, and first-class support for human-in-the-loop interrupts and long-term persistence.
+LangGraph 把 Agent 工作流建成**显式、有状态的图**，比简单的 LLM chain 更进一步。LangChain 的 LCEL 链路是无环的（输入一路流到输出），而 LangGraph 支持**环**：节点可以把执行路由回前面的节点，这正是 Agent 需要的迭代循环。它建立在 LangChain 之上，提供类型化共享状态、确定的控制流，以及对人机协同中断和长时持久化的一等支持。
 
 <Tip>
-  If your workflow is a straight pipeline — prompt in, structured output — use LCEL. Reach for LangGraph the moment you need loops, branching, or state that persists across multiple LLM calls.
+  如果只是「提示进、结构化结果出」的直管道，用 LCEL 就够。一旦需要循环、分支，或要在多次 LLM 调用之间保留状态，再上 LangGraph。
 </Tip>
 
 ---
 
-## Core Concepts
+## 核心概念
 
 ### StateGraph
 
-`StateGraph` is the central object in every LangGraph application. You define it with a **typed state schema** — a `TypedDict` that describes every field your graph reads and writes. All nodes share this schema; when a node returns a dict, LangGraph merges it into the current state using each field's **reducer** function.
+`StateGraph` 是每个 LangGraph 应用的中心对象。你用**类型化状态 schema**（通常是 `TypedDict`）定义图会读、会写的所有字段。节点共享这份 schema；节点返回 dict 时，LangGraph 按每个字段的 **reducer** 合并进当前状态。
 
 ```python agents/state_schema.py
 from typing import TypedDict, Annotated
 from langgraph.graph.message import add_messages
 
 class AgentState(TypedDict):
-    # add_messages is a reducer: it appends new messages rather than replacing
+    # add_messages 是 reducer：追加消息，而不是整表替换
     messages: Annotated[list, add_messages]
-    # Simple fields are replaced on each update
+    # 普通字段每次更新会直接覆盖
     current_step: str
     error_count: int
 ```
 
 <Note>
-  The `add_messages` reducer is a LangGraph built-in that appends incoming messages to the list rather than overwriting it. For any field where you want replacement semantics (the default), omit the `Annotated` wrapper.
+  `add_messages` 是内置 reducer，把新消息追加到列表。若字段要「覆盖」语义（默认行为），不要包 `Annotated`。
 </Note>
 
-### Nodes
+### 节点（Nodes）
 
-A **node** is any Python callable that accepts the current state and returns a partial state update. Nodes are where your LLM calls, tool executions, and business logic live.
+**节点**是任意可调用对象：接收当前状态，返回部分状态更新。LLM 调用、工具执行、业务逻辑都放在节点里。
 
 ```python agents/nodes.py
 from langchain_openai import ChatOpenAI
@@ -44,27 +43,27 @@ from langchain_openai import ChatOpenAI
 llm = ChatOpenAI(model="gpt-4o", temperature=0)
 
 def call_llm(state: AgentState) -> dict:
-    """Invoke the LLM with the current message history."""
+    """用当前消息历史调用 LLM。"""
     response = llm.invoke(state["messages"])
     return {"messages": [response]}
 
 def handle_error(state: AgentState) -> dict:
-    """Increment the error counter and add a recovery message."""
+    """错误计数 +1，并写入恢复相关信息。"""
     return {"error_count": state["error_count"] + 1}
 ```
 
-### Edges
+### 边（Edges）
 
-**Edges** define the control flow between nodes. LangGraph supports two kinds:
+**边**定义节点之间的控制流，常见两类：
 
-- **Normal edges** (`add_edge`): unconditional transitions. After node A, always go to node B.
-- **Conditional edges** (`add_conditional_edges`): a routing function inspects state and returns the name of the next node (or `END`).
+- **普通边**（`add_edge`）：无条件跳转。A 之后一定到 B。
+- **条件边**（`add_conditional_edges`）：路由函数看状态，返回下一个节点名（或 `END`）。
 
 ```python agents/edges.py
 from langgraph.graph import END
 
 def should_continue(state: AgentState) -> str:
-    """Route to 'tools' if the LLM made a tool call, otherwise finish."""
+    """LLM 发起了工具调用就去 tools，否则结束。"""
     last_message = state["messages"][-1]
     if hasattr(last_message, "tool_calls") and last_message.tool_calls:
         return "tools"
@@ -73,22 +72,21 @@ def should_continue(state: AgentState) -> str:
 
 ### Checkpointing
 
-A **checkpointer** persists the full graph state after every node execution. This enables:
+**Checkpointer** 在每个节点执行后持久化整图状态，用来：
 
-- **Resumption**: pick up a long-running task exactly where it left off.
-- **Human-in-the-loop**: pause the graph, wait for a user decision, then resume.
-- **Time-travel debugging**: replay the graph from any historical state.
+- **恢复**：长任务从中断点继续
+- **人机协同**：暂停等用户决策再继续
+- **时光机调试**：从历史任一状态重放
 
 ```python agents/checkpointing.py
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.checkpoint.sqlite import SqliteSaver
 
-# In-memory: great for development and testing
+# 内存：适合开发和测试
 memory = MemorySaver()
 graph = builder.compile(checkpointer=memory)
 
-# SQLite: persistent across process restarts.
-# from_conn_string is a context manager — always use it with `with`.
+# SQLite：进程重启后仍在。from_conn_string 是上下文管理器，必须用 with。
 with SqliteSaver.from_conn_string("checkpoints.db") as db:
     persistent_graph = builder.compile(checkpointer=db)
     result = persistent_graph.invoke(
@@ -98,79 +96,76 @@ with SqliteSaver.from_conn_string("checkpoints.db") as db:
 ```
 
 <Warning>
-  `MemorySaver` is lost when your process exits. Use `SqliteSaver` (local) or a production-grade checkpointer (PostgreSQL via `langgraph-checkpoint-postgres`) for any workflow that needs to survive restarts or serve multiple users concurrently. Note that `SqliteSaver.from_conn_string` is a **context manager** — passing it without `with` returns a generator object, not a checkpointer, causing a runtime error.
+  `MemorySaver` 进程退出就丢。需要跨重启或多用户并发时，用 `SqliteSaver`（本地）或生产级 checkpointer（如 `langgraph-checkpoint-postgres`）。注意：不用 `with` 直接拿 `from_conn_string` 会得到 generator，而不是 checkpointer，运行时会报错。
 </Warning>
 
 ---
 
-## Building Your First Agent
+## 搭一个最小 Agent
 
-Here's a complete ReAct-style agent built with LangGraph. Follow the steps, then review the full code below.
+下面是一个完整的 ReAct 风格 Agent。按步骤跟，完整代码见文末。
 
 <Steps>
-  <Step title="Define the state schema">
-    Create a `TypedDict` with every field your graph needs. For a message-based agent, `messages` with the `add_messages` reducer is almost always your starting point.
+  <Step title="定义状态 schema">
+    用 `TypedDict` 列出图需要的字段。消息型 Agent 几乎总是从带 `add_messages` 的 `messages` 起步。
 
     ```python agents/react_agent.py
     from typing import TypedDict, Annotated
     from langgraph.graph.message import add_messages
-
+    
     class AgentState(TypedDict):
         messages: Annotated[list, add_messages]
     ```
   </Step>
-
-  <Step title="Create the LLM and tool nodes">
-    Bind your tools to the LLM so it knows how to call them. The `ToolNode` from LangGraph handles executing tool calls and returning `ToolMessage` objects automatically.
+  <Step title="创建 LLM 与工具节点">
+    把工具 bind 到 LLM，让模型知道怎么调。LangGraph 的 `ToolNode` 负责执行工具调用并返回 `ToolMessage`。
 
     ```python agents/react_agent.py
     from langchain_openai import ChatOpenAI
     from langchain_community.tools.tavily_search import TavilySearchResults
     from langgraph.prebuilt import ToolNode
-
+    
     llm = ChatOpenAI(model="gpt-4o", temperature=0)
     tools = [TavilySearchResults(max_results=3)]
-
+    
     llm_with_tools = llm.bind_tools(tools)
     tool_node = ToolNode(tools)
-
+    
     def call_llm(state: AgentState) -> dict:
         response = llm_with_tools.invoke(state["messages"])
         return {"messages": [response]}
     ```
   </Step>
-
-  <Step title="Add nodes and edges with conditional routing">
-    Wire up the graph: START → LLM → (tools → LLM again) or END.
+  <Step title="加节点和条件路由">
+    连图：START → LLM →（tools → 再回 LLM）或 END。
 
     ```python agents/react_agent.py
     from langgraph.graph import StateGraph, START, END
-
+    
     def should_continue(state: AgentState) -> str:
         last = state["messages"][-1]
         if hasattr(last, "tool_calls") and last.tool_calls:
             return "tools"
         return END
-
+    
     builder = StateGraph(AgentState)
     builder.add_node("llm", call_llm)
     builder.add_node("tools", tool_node)
-
+    
     builder.add_edge(START, "llm")
     builder.add_conditional_edges("llm", should_continue)
-    builder.add_edge("tools", "llm")  # after tools, always go back to LLM
+    builder.add_edge("tools", "llm")  # 工具跑完一律回 LLM
     ```
   </Step>
-
-  <Step title="Compile and invoke the graph">
-    Compile with an optional checkpointer, then invoke with a thread ID so state is tracked per conversation.
+  <Step title="编译并 invoke">
+    可选挂 checkpointer；用 `thread_id` 按会话跟踪状态。
 
     ```python agents/react_agent.py
     from langgraph.checkpoint.memory import MemorySaver
     from langchain_core.messages import HumanMessage
-
+    
     graph = builder.compile(checkpointer=MemorySaver())
-
+    
     config = {"configurable": {"thread_id": "session-001"}}
     result = graph.invoke(
         {"messages": [HumanMessage(content="What's the weather in Tokyo right now?")]},
@@ -181,9 +176,10 @@ Here's a complete ReAct-style agent built with LangGraph. Follow the steps, then
   </Step>
 </Steps>
 
-### Complete Agent Code
+### 完整代码
 
 <CodeGroup>
+
 ```python agents/react_agent.py
 from typing import TypedDict, Annotated
 from langgraph.graph import StateGraph, START, END
@@ -194,29 +190,24 @@ from langchain_openai import ChatOpenAI
 from langchain_community.tools.tavily_search import TavilySearchResults
 from langchain_core.messages import HumanMessage
 
-# ── State ──────────────────────────────────────────────────────────────────
 class AgentState(TypedDict):
     messages: Annotated[list, add_messages]
 
-# ── LLM + Tools ───────────────────────────────────────────────────────────
 llm = ChatOpenAI(model="gpt-4o", temperature=0)
 tools = [TavilySearchResults(max_results=3)]
 llm_with_tools = llm.bind_tools(tools)
 tool_node = ToolNode(tools)
 
-# ── Nodes ─────────────────────────────────────────────────────────────────
 def call_llm(state: AgentState) -> dict:
     response = llm_with_tools.invoke(state["messages"])
     return {"messages": [response]}
 
-# ── Routing ───────────────────────────────────────────────────────────────
 def should_continue(state: AgentState) -> str:
     last = state["messages"][-1]
     if hasattr(last, "tool_calls") and last.tool_calls:
         return "tools"
     return END
 
-# ── Graph ─────────────────────────────────────────────────────────────────
 builder = StateGraph(AgentState)
 builder.add_node("llm", call_llm)
 builder.add_node("tools", tool_node)
@@ -226,7 +217,6 @@ builder.add_edge("tools", "llm")
 
 graph = builder.compile(checkpointer=MemorySaver())
 
-# ── Invocation ────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     config = {"configurable": {"thread_id": "demo-thread"}}
     result = graph.invoke(
@@ -242,21 +232,21 @@ export OPENAI_API_KEY="sk-..."
 export TAVILY_API_KEY="tvly-..."
 python agents/react_agent.py
 ```
+
 </CodeGroup>
 
 ---
 
-## Human-in-the-Loop
+## 人机协同（Human-in-the-Loop）
 
-LangGraph's interrupt mechanism lets you **pause** graph execution before or after any node, surface the current state to a human, and then resume with updated input.
+可以用 interrupt 在节点前/后**暂停**执行，把当前状态交给人，再带着更新后的输入继续。
 
 ```python agents/human_in_loop.py
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langchain_core.messages import HumanMessage
 
-# SqliteSaver.from_conn_string is a context manager — use it with `with`
 with SqliteSaver.from_conn_string("hitl.db") as db:
-    # Interrupt BEFORE the "tools" node runs — let a human approve the tool call
+    # 在 tools 节点前打断——让人审批工具调用
     hitl_graph = builder.compile(
         checkpointer=db,
         interrupt_before=["tools"],
@@ -264,34 +254,33 @@ with SqliteSaver.from_conn_string("hitl.db") as db:
 
     config = {"configurable": {"thread_id": "hitl-session-1"}}
 
-    # Run until the interrupt
     state = hitl_graph.invoke(
         {"messages": [HumanMessage(content="Delete all files in /tmp")]},
         config=config,
     )
 
-    # Inspect pending tool calls
     pending = state["messages"][-1].tool_calls
     print("Pending tool calls:", pending)
 
-    # Human approves → resume by passing None (no state change needed)
+    # 人批准后传 None 继续（状态无需改）
     final = hitl_graph.invoke(None, config=config)
     print(final["messages"][-1].content)
 ```
 
 <Tip>
-  Use `interrupt_before` to gate destructive or irreversible actions (file writes, API mutations, email sends). Use `interrupt_after` when you want to review the tool result before the LLM reasons about it.
+  写文件、改数据、发邮件这类不可逆动作，用 `interrupt_before` 拦住。想先看工具结果再让模型推理，用 `interrupt_after`。
 </Tip>
 
 ---
 
-## Streaming
+## 流式输出
 
-LangGraph supports three streaming modes, letting you push incremental output to your UI as soon as it's available.
+LangGraph 支持多种 stream 模式，方便把增量结果推到 UI。
 
 <CodeGroup>
+
 ```python agents/streaming_values.py
-# stream_mode="values" — emit full state after every node
+# stream_mode="values" — 每个节点后吐出完整状态
 for state in graph.stream(
     {"messages": [HumanMessage(content="Explain quantum entanglement")]},
     config=config,
@@ -302,7 +291,7 @@ for state in graph.stream(
 ```
 
 ```python agents/streaming_updates.py
-# stream_mode="updates" — emit only the delta returned by each node
+# stream_mode="updates" — 只吐每个节点返回的增量
 for node_name, update in graph.stream(
     {"messages": [HumanMessage(content="Explain quantum entanglement")]},
     config=config,
@@ -312,7 +301,7 @@ for node_name, update in graph.stream(
 ```
 
 ```python agents/streaming_tokens.py
-# astream_events — stream individual LLM tokens for real-time display
+# astream_events — 按 LLM token 流式输出，适合实时展示
 import asyncio
 
 async def stream_tokens():
@@ -328,8 +317,9 @@ async def stream_tokens():
 
 asyncio.run(stream_tokens())
 ```
+
 </CodeGroup>
 
 <Warning>
-  `stream_mode="debug"` emits every internal LangGraph event including checkpoint reads and writes. It's invaluable for debugging but extremely verbose — disable it before going to production or your logs will be unmanageable.
+  `stream_mode="debug"` 会打出几乎所有内部事件，调试很有用，但日志量极大——上线前务必关掉。
 </Warning>

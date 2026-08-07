@@ -1,361 +1,45 @@
 ---
-title: "AI SaaS Architecture: Multi-Tenant LLM Application Design"
-sidebarTitle: "SaaS Architecture"
-description: "Design patterns for multi-tenant AI SaaS products: tenant isolation, shared vs dedicated inference, per-tenant RAG, rate limiting, and cost attribution."
+title: "AI SaaS 架构：多租户 LLM 应用设计"
+sidebarTitle: "SaaS 架构"
+description: "多租户 AI SaaS 设计：租户隔离、共享/专用推理、按租户 RAG、限流与成本归因。"
 ---
-
-Building an AI SaaS product requires solving multi-tenancy at every layer — from LLM inference routing to vector stores to billing. A single-tenant architecture that works fine for an internal tool falls apart when you add data isolation requirements, per-tenant customization, and usage-based pricing. This page covers the architectural patterns that hold up as your product scales.
+做 AI SaaS，多租户要从推理路由、向量库到计费整层想清楚。内部工具的「单租户能跑」一到数据隔离、按租户定制、按量计费就会散架。
 
 <Note>
-  Start with shared infrastructure. The patterns here describe where you're headed, not necessarily where you need to be on day one. Migrate toward isolation as compliance requirements and scale demand it — premature tenant isolation adds complexity without proportional benefit.
+  早期可以先共享基础设施。下面讲的是演进方向：合规和规模要求上来再加强隔离，过早隔离只会白白加复杂度。
 </Note>
 
-## Multi-Tenancy Fundamentals
+## 隔离模型
 
-### Isolation Models
+- **共享**：算力、库、向量库共用，靠元数据过滤和权限控数据
+- **混合（多数生产更合适）**：算力共享，数据按租户拆（独立 collection / schema / 行级租户 ID）
+- **独占**：企业合同、强监管场景，租户自有一套
 
-There are three broad models for multi-tenant infrastructure, each representing a different point on the cost/isolation trade-off curve:
+无论哪种，这几层都要显式隔离：向量索引、会话历史、文件存储、用量归因。
 
-<CardGroup cols={3}>
-  <Card title="Shared Infrastructure" icon="share-nodes" href="/llm-infra/saas-architecture#isolation-models">
-    All tenants share compute, databases, and vector stores. Tenant data is separated by metadata filters and access control in application code.
+请求进数据层之前，必须先解析出可信的 `tenant_id`（JWT claim 或 API Key 映射）。
 
-    **Best for:** Early-stage products, cost-sensitive deployments, non-regulated industries
-  </Card>
-  <Card title="Hybrid" icon="code-branch" href="/llm-infra/saas-architecture#isolation-models">
-    Shared compute and APIs, but per-tenant data stores (separate vector collections, separate database schemas or rows partitioned by tenant ID).
+## 按租户的 RAG
 
-    **Best for:** Most production SaaS products — good balance of isolation and operational simplicity
-  </Card>
-  <Card title="Siloed (Dedicated)" icon="lock" href="/llm-infra/saas-architecture#isolation-models">
-    Each tenant gets their own infrastructure: dedicated compute, isolated databases, separate deployments.
+两种常见策略：
 
-    **Best for:** Enterprise contracts, regulated industries (healthcare, finance), highest-security requirements
-  </Card>
-</CardGroup>
+1. **一租户一 collection**：隔离强，运维多一点
+2. **共享 collection \+ tenant\_id 过滤**：运维简单，但过滤必须由向量库强制，且要对 `tenant_id` 建 payload 索引
 
-### What to Isolate
+入库时每个 chunk 都要打上租户身份，不能事后补救。
 
-Regardless of which model you choose, these four layers require explicit tenant isolation:
+## 请求路由与套餐
 
-- **Vector store collections** — RAG document indexes must never leak between tenants
-- **Conversation history** — chat memory and session state must be scoped to tenant + user
-- **File storage** — uploaded documents, embeddings source files, generated outputs
-- **Usage tracking** — token consumption, request counts, costs must be attributed per tenant for billing
+API 网关是统一控制点：鉴权、预算、按套餐选模型都在这里做，再进推理后端。例如 Free/Pro 走小模型，Enterprise 走更大模型；也可支持 BYOK 或租户自建 vLLM。
 
-### Tenant Identification
+## 成本归因与限流
 
-Every request in your system needs a verified tenant identity attached before it reaches any data layer:
+按请求记 `UsageEvent`（租户、用户、模型、prompt/completion tokens、成本）。PostgreSQL 够用；超高量可上 ClickHouse。预算建议软限制（提醒）\+ 硬限制（429），付费计划可考虑小幅超额缓冲。
 
-<CodeGroup>
-  ```python title="JWT Claim Extraction"
-  import os
-  import jwt
+## 异步与流式
 
-  JWT_SECRET = os.environ["JWT_SECRET_KEY"]  # Load from environment — never hardcode
-
-  def extract_tenant_from_jwt(token: str) -> str:
-      payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
-      tenant_id = payload.get("tenant_id")
-      if not tenant_id:
-          raise ValueError("Token missing tenant_id claim")
-      return tenant_id
-  ```
-
-  ```python title="API Key Tenant Mapping"
-  async def tenant_from_api_key(api_key: str) -> str:
-      # Look up tenant in your key store (Redis cache recommended)
-      tenant_id = await redis.get(f"apikey:{api_key}:tenant")
-      if not tenant_id:
-          raise HTTPException(status_code=401, detail="Invalid API key")
-      return tenant_id.decode()
-  ```
-</CodeGroup>
-
----
-
-## Per-Tenant RAG Architecture
-
-RAG is where multi-tenancy gets most complex. Your retrieval layer must guarantee that a query from Tenant A never surfaces documents belonging to Tenant B — even under load or in edge cases.
-
-### Collection-per-Tenant vs Metadata Filtering
-
-```python title="Per-Tenant RAG Strategies"
-from langchain_qdrant import Qdrant
-from qdrant_client import QdrantClient
-
-qdrant_client = QdrantClient(url="http://localhost:6333")
-
-# ── Strategy 1: Collection-per-tenant ──────────────────────────────────────
-# Each tenant gets their own Qdrant collection.
-# Strong isolation by default — no risk of cross-tenant leakage.
-# Slightly higher ops overhead (more collections to manage).
-def get_tenant_vectorstore(tenant_id: str) -> Qdrant:
-    return Qdrant(
-        client=qdrant_client,
-        collection_name=f"tenant_{tenant_id}_docs",
-        embeddings=embeddings
-    )
-
-# ── Strategy 2: Shared collection with metadata filter ─────────────────────
-# All tenants share one collection; tenant_id is stored as payload metadata.
-# Simpler ops, but you MUST set a payload index on tenant_id for performance.
-# Ensure your vector store enforces the filter — don't rely on app logic alone.
-def get_tenant_retriever(tenant_id: str):
-    return vectorstore.as_retriever(
-        search_kwargs={
-            "k": 5,
-            "filter": {"tenant_id": tenant_id}
-        }
-    )
-```
+文档入库、批量推理别卡在同步 HTTP 超时里——用任务队列（如 Celery）分优先级。聊天界面用 SSE/WebSocket 流式吐 token；单向推送优先 SSE，更简单好代理。
 
 <Warning>
-  If you use the metadata-filter approach, create a **payload index** on `tenant_id` in Qdrant (or the equivalent in your vector store). Without an index, filtered searches degrade to full-collection scans — a correctness risk and a performance disaster at scale.
-</Warning>
-
-### Document Ingestion Pipeline
-
-When a tenant uploads a document, your ingestion pipeline needs to tag every chunk with the tenant's identity before it hits the vector store:
-
-```python title="Tenant-Aware Document Ingestion"
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_core.documents import Document
-
-async def ingest_document(
-    file_content: str,
-    filename: str,
-    tenant_id: str,
-) -> int:
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=512,
-        chunk_overlap=64,
-    )
-    chunks = splitter.split_text(file_content)
-
-    documents = [
-        Document(
-            page_content=chunk,
-            metadata={
-                "tenant_id": tenant_id,
-                "filename": filename,
-                "chunk_index": i,
-            },
-        )
-        for i, chunk in enumerate(chunks)
-    ]
-
-    vectorstore = get_tenant_vectorstore(tenant_id)
-    await vectorstore.aadd_documents(documents)
-    return len(documents)
-```
-
----
-
-## LLM Request Routing
-
-Your API gateway is the single control point for all LLM traffic. This is where you enforce tenant plans, rate limits, and model routing — before any request reaches your inference backend.
-
-### FastAPI Tenant Middleware
-
-```python title="Tenant-Aware Chat Endpoint"
-from fastapi import FastAPI, Depends, HTTPException
-from fastapi.security import HTTPBearer
-from pydantic import BaseModel
-
-app = FastAPI()
-security = HTTPBearer()
-
-class ChatRequest(BaseModel):
-    message: str
-    conversation_id: str
-
-async def get_tenant(credentials = Depends(security)):
-    """Dependency that validates the bearer token and returns the tenant."""
-    tenant = await verify_token(credentials.credentials)
-    if not tenant:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
-    return tenant
-
-@app.post("/chat")
-async def chat(request: ChatRequest, tenant = Depends(get_tenant)):
-    # Route to appropriate model based on tenant's subscription plan
-    model = "gpt-4o" if tenant.plan == "enterprise" else "gpt-4o-mini"
-
-    # Enforce token budget before making the request
-    remaining = await get_remaining_budget(tenant.id)
-    if remaining <= 0:
-        raise HTTPException(
-            status_code=429,
-            detail="Monthly token limit reached. Upgrade your plan to continue."
-        )
-
-    # Apply tenant-specific system prompt if configured
-    system_prompt = tenant.custom_system_prompt or DEFAULT_SYSTEM_PROMPT
-
-    response = await call_llm(
-        model=model,
-        system_prompt=system_prompt,
-        user_message=request.message,
-        tenant_id=tenant.id,
-    )
-    return {"response": response}
-```
-
-### Tenant Plan → Model Mapping
-
-| Plan | Model | Max Context | Requests/min |
-|---|---|---|---|
-| Free | `gpt-4o-mini` | 8K tokens | 10 |
-| Pro | `gpt-4o-mini` | 32K tokens | 60 |
-| Enterprise | `gpt-4o` | 128K tokens | Unlimited |
-
-<Tip>
-  Give enterprise tenants the option to bring their own API keys (BYOK) or connect to their own vLLM deployment. This removes your inference cost while keeping them on your platform — a popular pattern for high-volume enterprise deals.
-</Tip>
-
----
-
-## Cost Attribution and Billing
-
-You can't build usage-based pricing without knowing exactly what each tenant consumed. Track token usage at the request level, not just in aggregate.
-
-### Usage Event Schema
-
-```python title="Usage Tracking"
-from datetime import datetime
-from dataclasses import dataclass
-
-@dataclass
-class UsageEvent:
-    tenant_id: str
-    user_id: str
-    request_id: str
-    model: str
-    prompt_tokens: int
-    completion_tokens: int
-    total_tokens: int
-    cost_usd: float
-    endpoint: str
-    timestamp: datetime
-
-async def record_usage(event: UsageEvent):
-    """Persist a usage event for billing and analytics."""
-    await db.execute(
-        """
-        INSERT INTO usage_events
-            (tenant_id, user_id, request_id, model,
-             prompt_tokens, completion_tokens, total_tokens,
-             cost_usd, endpoint, timestamp)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-        """,
-        event.tenant_id, event.user_id, event.request_id, event.model,
-        event.prompt_tokens, event.completion_tokens, event.total_tokens,
-        event.cost_usd, event.endpoint, event.timestamp,
-    )
-
-    # Update rolling budget counter in Redis for fast limit checks
-    await redis.incrbyfloat(
-        f"budget:{event.tenant_id}:{event.timestamp.strftime('%Y-%m')}",
-        event.total_tokens,
-    )
-```
-
-### Storage Recommendations
-
-- **PostgreSQL** — works well for most products; use a `usage_events` table with indexes on `(tenant_id, timestamp)`. Partition by month at scale.
-- **ClickHouse** — better for very high-volume usage data and analytics queries. Excellent if you're building usage dashboards or running complex aggregations across millions of events.
-
-### Budget Enforcement
-
-Implement both soft and hard limits to give tenants a graceful experience when approaching their quota:
-
-<Steps>
-  <Step title="Soft limit (80% of budget)">
-    Send a webhook notification to the tenant's configured endpoint and display an in-app warning banner. Don't degrade service yet.
-  </Step>
-  <Step title="Hard limit (100% of budget)">
-    Return HTTP 429 with a clear error message and a link to the upgrade page. Log the event for customer success follow-up.
-  </Step>
-  <Step title="Grace period (optional)">
-    For paid plans, consider allowing a 10–20% overage with retroactive billing rather than hard-blocking. Reduces churn from accidental limit hits.
-  </Step>
-</Steps>
-
----
-
-## Async Processing Architecture
-
-Not every LLM task fits in a synchronous HTTP request. Document ingestion, batch inference, and report generation can take minutes — far beyond reasonable HTTP timeout thresholds.
-
-### Task Queue Pattern
-
-```python title="Celery Task Queue Setup"
-from celery import Celery
-from kombu import Queue
-
-celery_app = Celery(
-    "llm_worker",
-    broker="redis://localhost:6379/0",
-    backend="redis://localhost:6379/1",
-)
-
-celery_app.conf.task_queues = (
-    Queue("high_priority"),   # Interactive requests (chat, Q&A)
-    Queue("default"),         # Standard async tasks
-    Queue("low_priority"),    # Batch jobs (bulk ingestion, reports)
-)
-
-@celery_app.task(queue="default", bind=True, max_retries=3)
-def ingest_document_task(self, tenant_id: str, s3_key: str):
-    """Background task to download, chunk, and index a document."""
-    try:
-        content = download_from_s3(s3_key)
-        chunk_count = ingest_document(content, s3_key, tenant_id)
-        notify_tenant(tenant_id, f"Indexed {chunk_count} chunks from {s3_key}")
-    except Exception as exc:
-        raise self.retry(exc=exc, countdown=30)
-```
-
-### Streaming LLM Responses
-
-For real-time chat interfaces, stream LLM tokens to the frontend as they're generated rather than waiting for the full response:
-
-```python title="SSE Streaming with FastAPI"
-from fastapi import FastAPI
-from fastapi.responses import StreamingResponse
-from openai import AsyncOpenAI
-
-client = AsyncOpenAI()
-
-@app.post("/chat/stream")
-async def chat_stream(request: ChatRequest, tenant = Depends(get_tenant)):
-    async def token_generator():
-        stream = await client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": request.message}],
-            stream=True,
-        )
-        async for chunk in stream:
-            delta = chunk.choices[0].delta.content
-            if delta:
-                yield f"data: {delta}\n\n"
-        yield "data: [DONE]\n\n"
-
-    return StreamingResponse(
-        token_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",  # Disable nginx buffering
-        },
-    )
-```
-
-<Info>
-  Use **WebSockets** if you need bidirectional communication (e.g., the frontend sends follow-up messages mid-stream). Use **Server-Sent Events (SSE)** if you only need server-to-client streaming — it's simpler, works over standard HTTP/2, and is easier to proxy through infrastructure like CloudFront or Nginx.
-</Info>
-
-<Warning>
-  Data isolation is a legal compliance requirement in many industries — not just a best practice. HIPAA (healthcare), SOC 2 Type II, and GDPR all impose specific requirements around how tenant data is stored, accessed, and deleted. If you're selling to enterprises in regulated industries, get your isolation architecture reviewed by a compliance specialist before you sign contracts.
+  数据隔离在不少行业是合规要求，不只是「最佳实践」。面向医疗/金融等企业客户前，隔离方案最好过合规评审。
 </Warning>

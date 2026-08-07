@@ -1,21 +1,20 @@
 ---
-title: "Tool Use in LLM Agents: Function Calling Patterns"
-sidebarTitle: "Tool Use"
-description: "Implement reliable tool use in LLM agents: function calling, tool schemas, error handling, and patterns for web search, code execution, and APIs."
+title: "LLM Agent 中的工具使用：Function Calling 模式"
+sidebarTitle: "工具调用"
+description: "在 LLM Agent 中实现可靠工具调用：Function Calling、Schema、错误处理，以及搜索、代码执行与 API。"
+---
+工具把 LLM 从「只会写字」变成**能动手的系统**。没有工具，Agent 可以推理、规划，但改不了外部世界；有了工具，就能搜网页、跑代码、调 API、读写文件、查库——都在同一条推理循环里完成。背后机制是 **Function Calling**：模型吐出结构化 JSON（调哪个工具、参数是什么），你的代码执行，结果再作为下一次观察写回上下文。
+
 ---
 
-Tools are what transform an LLM from a text generator into an **action-taker**. Without tools, an agent can reason and plan but can't actually change anything in the world. With them, it can search the web, run code, call APIs, read and write files, and query databases — all from within a single reasoning loop. The mechanism that makes this work is **function calling**: the model emits structured JSON describing which tool to call and with what arguments, your code executes it, and the result gets fed back into the model's context as the next observation.
+## 一次工具调用怎么走完
 
----
+四步：
 
-## How Tool Calling Works
-
-The lifecycle of a single tool call has four stages:
-
-1. **Schema registration** — you declare available tools (name, description, parameter schema) when initializing the LLM.
-2. **Model decision** — the LLM decides to call a tool and emits a structured `tool_calls` object instead of (or alongside) a text response.
-3. **Execution** — your code intercepts the tool call, runs the corresponding function, and captures the output.
-4. **Result injection** — the output is wrapped in a `ToolMessage` and appended to the message history, giving the model its next observation.
+1. **注册 Schema** — 初始化 LLM 时声明可用工具（名字、描述、参数）
+2. **模型决策** — 决定调工具，发出 `tool_calls`（可同时带或不带文本）
+3. **执行** — 你的代码拦截调用、跑对应函数、拿到输出
+4. **回灌结果** — 包成 `ToolMessage` 追加到历史，成为下一次观察
 
 ```python agents/tool_lifecycle.py
 from langchain_openai import ChatOpenAI
@@ -33,11 +32,9 @@ llm_with_tools = llm.bind_tools([add_numbers])
 messages = [HumanMessage(content="What is 1337 + 42?")]
 response = llm_with_tools.invoke(messages)
 
-# The model emits a tool call instead of answering directly
 print(response.tool_calls)
 # [{'name': 'add_numbers', 'args': {'a': 1337.0, 'b': 42.0}, 'id': 'call_abc123'}]
 
-# Execute and feed back the result
 tool_call = response.tool_calls[0]
 result = add_numbers.invoke(tool_call["args"])
 
@@ -47,327 +44,58 @@ print(final.content)  # "1337 + 42 = 1379"
 ```
 
 <Note>
-  The model never executes code directly — it only *requests* execution by emitting a structured tool call. Your application code is always in control of whether and how that call is executed. This is what makes tool use safe to gate with human-in-the-loop checks.
+  模型从不直接执行代码——它只是**请求**执行。是否执行、怎么执行，永远由你的应用代码决定。所以才能用人工审批把危险操作拦住。
 </Note>
 
 ---
 
-## Defining Tools
+## 怎么定义工具
 
-LangChain's `@tool` decorator is the fastest way to define tools. It introspects your function's type hints and docstring to auto-generate the JSON schema the LLM receives.
-
-<CodeGroup>
-```python agents/tools/langchain_tools.py
-from langchain_core.tools import tool
-from typing import Optional
-
-@tool
-def search_web(query: str) -> str:
-    """Search the web for current information on a topic.
-
-    Use this when you need up-to-date facts, news, or information
-    that may not be in your training data.
-    """
-    # Replace with your actual search implementation (Tavily, SerpAPI, etc.)
-    from langchain_community.tools.tavily_search import TavilySearchResults
-    searcher = TavilySearchResults(max_results=3)
-    results = searcher.invoke(query)
-    return "\n\n".join([r["content"] for r in results])
-
-@tool
-def execute_python(code: str) -> str:
-    """Execute Python code in a sandboxed environment and return stdout.
-
-    Use this for calculations, data transformations, and algorithmic tasks.
-    The environment is stateless — imports and variables do not persist between calls.
-    """
-    import subprocess, sys, textwrap
-    result = subprocess.run(
-        [sys.executable, "-c", textwrap.dedent(code)],
-        capture_output=True, text=True, timeout=15
-    )
-    return result.stdout or result.stderr
-
-@tool
-def read_file(path: str, max_lines: Optional[int] = 100) -> str:
-    """Read the contents of a file. Limits output to max_lines lines."""
-    with open(path, "r") as f:
-        lines = f.readlines()
-    return "".join(lines[:max_lines])
-```
-
-```python agents/tools/openai_schema.py
-# Equivalent OpenAI function schema (for use with the raw OpenAI client)
-search_tool_schema = {
-    "type": "function",
-    "function": {
-        "name": "search_web",
-        "description": (
-            "Search the web for current information on a topic. "
-            "Use this when you need up-to-date facts or news."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "The search query string.",
-                }
-            },
-            "required": ["query"],
-        },
-    },
-}
-
-from openai import OpenAI
-client = OpenAI()
-response = client.chat.completions.create(
-    model="gpt-4o",
-    messages=[{"role": "user", "content": "What happened in AI this week?"}],
-    tools=[search_tool_schema],
-    tool_choice="auto",
-)
-```
-</CodeGroup>
+LangChain 的 `@tool` 最省事：根据类型注解和 docstring 自动生成模型看到的 JSON Schema。
 
 <Tip>
-  Your tool's docstring **is** its schema description — the exact text the model reads when deciding whether to call the tool. Write it like documentation for a teammate, not a comment for yourself. Describe what the tool does, when to use it, and what it returns. Vague descriptions lead to incorrect or excessive tool calls.
+  **docstring 就是给模型看的说明。** 写清楚做什么、什么时候用、返回什么。含糊描述会导致乱调或过度调用。
+</Tip>
+
+常见类别：
+
+- **信息获取**：网页搜索、向量库、只读 SQL
+- **代码执行**：Python REPL、受控 shell
+- **外部 API**：REST、Slack 等通知
+
+---
+
+## 错误处理
+
+工具会失败：超时、500、路径不存在、SQL 写错。稳健的 Agent 要对每种失败有策略：
+
+- 瞬时错误：重试（如 tenacity）
+- 主通道挂了：换备用提供商
+- 在图里：用 `ToolNode(handle_tool_errors=True)` 把异常变成错误 `ToolMessage`，让模型自己决定重试、换工具还是告诉用户做不了
+
+<Tip>
+  失败时优先返回**可读的错误字符串**，而不是把堆栈砸给模型。模型把错误当观察，才更容易自救。
 </Tip>
 
 ---
 
-## Common Tool Categories
+## 并行工具调用
 
-### Information Retrieval
+GPT-4o、Claude 等可以在**一次响应里发多个 tool call**。LangGraph 的 `ToolNode` 会并行执行，缩短多工具步骤的延迟。
 
-```python agents/tools/retrieval_tools.py
-from langchain_core.tools import tool
-from langchain_community.tools.tavily_search import TavilySearchResults
-from langchain_chroma import Chroma  # langchain-chroma replaces langchain_community.vectorstores.Chroma
-from langchain_openai import OpenAIEmbeddings
-
-# Web search
-@tool
-def search_web(query: str) -> str:
-    """Search the web for current information."""
-    return TavilySearchResults(max_results=5).invoke(query)
-
-# Vector store lookup (semantic search over your documents)
-vectorstore = Chroma(
-    collection_name="knowledge_base",
-    embedding_function=OpenAIEmbeddings(),
-)
-
-@tool
-def search_knowledge_base(query: str) -> str:
-    """Search the knowledge base for relevant documents."""
-    docs = vectorstore.similarity_search(query, k=4)
-    return "\n\n---\n\n".join([d.page_content for d in docs])
-
-# SQL database query
-@tool
-def query_database(sql: str) -> str:
-    """Execute a read-only SQL SELECT query against the analytics database."""
-    import sqlite3
-    conn = sqlite3.connect("analytics.db")
-    cursor = conn.execute(sql)
-    rows = cursor.fetchall()
-    columns = [d[0] for d in cursor.description]
-    return str([dict(zip(columns, row)) for row in rows])
-```
-
-### Code Execution
-
-```python agents/tools/code_tools.py
-from langchain_core.tools import tool
-from langchain_experimental.tools.python.tool import PythonREPLTool
-
-# Stateful Python REPL — variables persist across calls within a session
-python_repl = PythonREPLTool()
-
-@tool
-def run_python(code: str) -> str:
-    """Execute Python code. Variables and imports persist across calls."""
-    return python_repl.run(code)
-
-@tool
-def run_shell(command: str) -> str:
-    """Run a shell command and return stdout. Use only for safe, read-only operations."""
-    import subprocess
-    result = subprocess.run(
-        command, shell=True, capture_output=True, text=True, timeout=30
-    )
-    return result.stdout + (f"\nSTDERR: {result.stderr}" if result.stderr else "")
-```
-
-### External APIs
-
-```python agents/tools/api_tools.py
-from langchain_core.tools import tool
-import httpx
-
-@tool
-def call_rest_api(url: str, method: str = "GET", payload: dict = None) -> str:
-    """Call an external REST API endpoint.
-
-    Args:
-        url: Full URL including query parameters.
-        method: HTTP method — GET or POST.
-        payload: JSON body for POST requests.
-    """
-    with httpx.Client(timeout=10) as client:
-        if method.upper() == "POST":
-            response = client.post(url, json=payload or {})
-        else:
-            response = client.get(url)
-    response.raise_for_status()
-    return response.text[:4000]  # Truncate to avoid flooding the context
-
-@tool
-def send_slack_message(channel: str, message: str) -> str:
-    """Send a message to a Slack channel via webhook."""
-    import os
-    webhook_url = os.environ["SLACK_WEBHOOK_URL"]
-    with httpx.Client() as client:
-        resp = client.post(webhook_url, json={"channel": channel, "text": message})
-    return "Message sent." if resp.status_code == 200 else f"Error: {resp.text}"
-```
-
----
-
-## Tool Error Handling
-
-Tool calls fail. Networks time out, APIs return 500s, file paths don't exist, SQL queries have syntax errors. A robust agent needs a strategy for each failure mode.
-
-<CodeGroup>
-```python agents/tools/error_handling.py
-from langchain_core.tools import tool
-from tenacity import retry, stop_after_attempt, wait_exponential
-import logging
-
-logger = logging.getLogger(__name__)
-
-@tool
-def search_web_with_retry(query: str) -> str:
-    """Search the web with automatic retry on transient failures."""
-
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=1, max=10),
-        reraise=False,
-    )
-    def _search(q: str) -> str:
-        from langchain_community.tools.tavily_search import TavilySearchResults
-        return str(TavilySearchResults(max_results=3).invoke(q))
-
-    try:
-        return _search(query)
-    except Exception as e:
-        logger.warning(f"Search failed after retries: {e}")
-        # Return a descriptive error — the LLM can decide what to do next
-        return f"Search unavailable: {str(e)}. Try rephrasing the query or use a different tool."
-```
-
-```python agents/tools/fallback_tools.py
-from langchain_core.tools import tool
-
-@tool
-def search_web(query: str) -> str:
-    """Search the web using Tavily, with DuckDuckGo as fallback."""
-    try:
-        from langchain_community.tools.tavily_search import TavilySearchResults
-        return str(TavilySearchResults(max_results=3).invoke(query))
-    except Exception as primary_error:
-        try:
-            from langchain_community.tools import DuckDuckGoSearchRun
-            return DuckDuckGoSearchRun().run(query)
-        except Exception as fallback_error:
-            return (
-                f"Both search providers failed.\n"
-                f"Primary: {primary_error}\n"
-                f"Fallback: {fallback_error}\n"
-                "Please try a different approach."
-            )
-```
-
-```python agents/tools/error_message_node.py
-# In a LangGraph graph: catch tool errors and return them as ToolMessages
-# so the LLM can reason about the failure and recover.
-from langgraph.prebuilt import ToolNode
-
-# ToolNode automatically catches exceptions and returns them as error ToolMessages
-# The LLM sees: "Error: <exception message>" and can decide to retry or give up
-tool_node = ToolNode(
-    tools=[search_web, execute_python],
-    handle_tool_errors=True,  # converts exceptions to error ToolMessages
-)
-```
-</CodeGroup>
-
-<Tip>
-  When a tool fails, return a **descriptive error string** rather than raising an exception (unless using `ToolNode` with `handle_tool_errors=True`). The LLM reads the error as its next observation and can choose to retry with different arguments, fall back to another tool, or tell the user it can't complete the task. Cryptic tracebacks confuse the model; plain-English error messages guide it toward recovery.
-</Tip>
-
----
-
-## Parallel Tool Execution
-
-Modern models like GPT-4o and Claude 3.5 can emit **multiple tool calls in a single response**. LangGraph's `ToolNode` executes them in parallel using `asyncio`, dramatically reducing latency for multi-tool steps.
+模型一般只在判定调用彼此独立时才会并行。依赖关系写清楚（工具描述里说明），通常不必手写调度。
 
 ```python agents/tools/parallel_tools.py
-from typing import TypedDict, Annotated
-from langgraph.graph import StateGraph, START, END
-from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 from langchain_openai import ChatOpenAI
-from langchain_core.tools import tool
-from langchain_core.messages import HumanMessage
-
-@tool
-def get_stock_price(ticker: str) -> str:
-    """Get the current stock price for a ticker symbol."""
-    # Simulated; replace with a real finance API
-    prices = {"AAPL": 189.30, "GOOGL": 175.50, "MSFT": 415.20}
-    return str(prices.get(ticker.upper(), "Ticker not found"))
-
-@tool
-def get_company_news(company: str) -> str:
-    """Get recent news headlines for a company."""
-    # Simulated; replace with a news API
-    return f"[Mock] Latest headlines for {company}: Q3 earnings beat expectations."
 
 tools = [get_stock_price, get_company_news]
-tool_node = ToolNode(tools)  # handles parallel execution automatically
-
+tool_node = ToolNode(tools)  # 自动并行
 llm = ChatOpenAI(model="gpt-4o", temperature=0).bind_tools(tools)
-
-class State(TypedDict):
-    messages: Annotated[list, add_messages]
-
-def call_llm(state: State) -> dict:
-    return {"messages": [llm.invoke(state["messages"])]}
-
-def should_continue(state: State) -> str:
-    last = state["messages"][-1]
-    return "tools" if (hasattr(last, "tool_calls") and last.tool_calls) else END
-
-builder = StateGraph(State)
-builder.add_node("llm", call_llm)
-builder.add_node("tools", tool_node)
-builder.add_edge(START, "llm")
-builder.add_conditional_edges("llm", should_continue)
-builder.add_edge("tools", "llm")
-graph = builder.compile()
-
-# The model will call get_stock_price AND get_company_news in the same step
-result = graph.invoke({
-    "messages": [HumanMessage(
-        content="What's Apple's stock price and any recent news about the company?"
-    )]
-})
-print(result["messages"][-1].content)
 ```
 
-<Note>
-  Parallel tool calls are only emitted when the model determines the calls are **independent** — i.e., neither result depends on the other. If you prompt the model to retrieve data and then process it in the same step, it will usually serialize the calls correctly. You don't need to manage this explicitly; just ensure your tool descriptions make dependencies clear.
-</Note>
+---
+
+## 小结
+
+可靠工具使用 = 清晰 Schema \+ 可控执行 \+ 可恢复错误 \+（需要时）并行。把危险操作放在你能审批、能审计的路径上，比「让模型自己跑一切」更接近生产。

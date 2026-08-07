@@ -1,0 +1,64 @@
+---
+title: "Projects: Applied AI Engineering in Production"
+sidebarTitle: "Overview"
+description: "An overview of applied AI engineering projects: agent platforms, RAG pipelines, and LLM SaaS products built with LangGraph, LangChain, and vLLM."
+---
+These projects represent real systems I built and deployed — each one solved a specific problem and yielded lessons that shaped how I approach AI engineering. None of them were toy examples: they ran in production, served real users, and broke in ways that forced me to think more carefully about reliability, observability, and architecture.
+
+## Projects
+
+<CardGroup cols={2}>
+  <Card title="AI Agent Platform" icon="robot" href="/en/projects/ai-agent-platform">
+    A multi-agent orchestration platform built with LangGraph, supporting autonomous task execution and human-in-the-loop workflows.
+  </Card>
+  <Card title="RAG Pipeline" icon="database" href="/en/projects/rag-pipeline">
+    A production RAG system with hybrid search, reranking, and evaluation, serving enterprise document Q&A at scale.
+  </Card>
+  <Card title="LLM SaaS" icon="cloud" href="/en/projects/llm-saas">
+    A multi-tenant AI SaaS product with per-tenant RAG, model routing, usage tracking, and streaming chat.
+  </Card>
+</CardGroup>
+
+## Engineering Principles Behind These Projects
+
+Every project here was shaped by the same set of principles I've arrived at through repeated trial and error. They're not dogma — they're patterns that reliably reduced the number of 2am incidents.
+
+<AccordionGroup>
+  <Accordion title="Observability First: Instrument Everything Before Optimizing" icon="chart-line">
+    I don't touch performance until I can measure it. For LLM systems, that means tracing every chain and agent invocation with LangSmith, capturing token counts and latency at each step, and building dashboards before writing optimization code. Optimizing a black box is guesswork.
+  </Accordion>
+  <Accordion title="Evaluation-Driven: Build Eval Datasets Before Shipping" icon="flask">
+    I learned this the hard way: shipping RAG improvements without a ground-truth eval set means you're flying blind. Now I build labeled evaluation datasets — question/answer pairs, expected tool calls, golden outputs — before I write any retrieval or generation logic. If I can't measure it, I don't ship it.
+  </Accordion>
+  <Accordion title="Graceful Degradation: Every AI Call Can Fail; Design for It" icon="shield-halved">
+    LLM APIs return 429s, time out, and occasionally return malformed JSON. Every integration I build has explicit retry logic, fallback models, and graceful error responses. A failed LLM call should never crash the application — it should return a sensible error message and log the failure for review.
+  </Accordion>
+  <Accordion title="Composable Architecture: Small Testable Components Over Monolithic Chains" icon="cubes">
+    A 400-line LangChain chain is untestable. I break pipelines into the smallest meaningful units — a retriever, a reranker, a prompt formatter, a response parser — each unit-tested in isolation. Composition happens at the graph level (LangGraph), where data flow is explicit and inspectable.
+  </Accordion>
+</AccordionGroup>
+
+## Technology Stack
+
+These projects share a common technology foundation. I chose each tool deliberately and have used it in production long enough to understand its tradeoffs.
+
+<CardGroup cols={2}>
+  <Card title="Backend" icon="server" href="#backend">
+    **Python + FastAPI** for all API surfaces. FastAPI's async support, automatic OpenAPI docs, and Pydantic integration make it the right choice for LLM-heavy backends where you're dealing with streaming responses and complex request validation.
+  </Card>
+  <Card title="Orchestration" icon="sitemap" href="#orchestration">
+    **LangChain + LangGraph** for agent and pipeline orchestration. LangChain for composable building blocks; LangGraph for stateful, cyclical agent workflows with checkpointing and interrupt support.
+  </Card>
+  <Card title="Vector Storage" icon="magnifying-glass" href="#vector-storage">
+    **Qdrant** for vector search. Supports dense, sparse, and hybrid collections natively. The filtering API is expressive enough to support per-tenant data isolation without hacks.
+  </Card>
+  <Card title="Inference" icon="microchip" href="#inference">
+    **OpenAI GPT-4o / GPT-4o-mini** for hosted inference and **Llama 3 / Qwen 2.5** via **vLLM** for self-hosted deployments requiring data sovereignty or cost control at scale.
+  </Card>
+  <Card title="Caching & Queuing" icon="bolt" href="#caching-queuing">
+    **Redis** for session caching, rate limit counters, and as the Celery message broker for background document indexing jobs. Fast, simple, and operationally well-understood.
+  </Card>
+  <Card title="Structured Data" icon="table" href="#structured-data">
+    **PostgreSQL** for all relational data: users, tenants, usage records, conversation history, and LangGraph checkpoints in production. JSONB columns handle semi-structured agent state without a separate document store.
+  </Card>
+</CardGroup>

@@ -1,0 +1,212 @@
+---
+title: "AI Agent Platform: Multi-Agent Task Execution System"
+sidebarTitle: "Agent Platform"
+description: "How I built a multi-agent task execution platform with LangGraph — supervisor routing, tool use, human-in-the-loop approval, and PostgreSQL checkpointing."
+---
+This project is a general-purpose multi-agent platform where users define tasks in natural language, and a supervisor agent delegates to specialized worker agents. I built it because users kept asking for a way to run complex research and analysis workflows without writing any code — they wanted to describe the task and get a result. The platform is the answer to that ask.
+
+## System Overview
+
+<CardGroup cols={2}>
+  <Card title="The Problem" icon="triangle-exclamation" href="#system-overview">
+    Users needed to execute complex multi-step research and analysis tasks — competitive analysis, document summarization, data extraction, report generation — without writing code or stitching together tools manually.
+  </Card>
+  <Card title="The Solution" icon="check" href="#system-overview">
+    A supervisor + specialist agent architecture where a GPT-4o supervisor routes sub-tasks to domain-specific worker agents, with explicit human checkpoints before any high-stakes action is taken.
+  </Card>
+</CardGroup>
+
+<Info>
+  In testing, the platform sustained **50–100 concurrent task executions** with per-task LangGraph state isolated in PostgreSQL. Each task is independently resumable after a human approval interrupt.
+</Info>
+
+## Architecture
+
+The system follows a hub-and-spoke model: the supervisor is the hub, specialist agents are the spokes. The supervisor never executes tasks directly — it only routes, reviews intermediate results, and decides whether to continue, loop, or finish.
+
+```text Architecture Diagram
+User Request
+    │
+    ▼
+┌─────────────────┐
+│  Supervisor     │ ← routes by task type
+│  Agent (GPT-4o) │
+└────────┬────────┘
+         │
+    ┌────┴────┐──────────────┬──────────────┐
+    ▼         ▼              ▼              ▼
+┌───────┐ ┌───────┐   ┌──────────┐  ┌──────────┐
+│ Web   │ │ Data  │   │  Code    │  │  Doc     │
+│Search │ │Analyst│   │Executor  │  │Generator │
+└───────┘ └───────┘   └──────────┘  └──────────┘
+         ↑
+  Human Approval
+  (interrupt_before)
+```
+
+Each specialist agent has its own tool set and system prompt tuned for its domain:
+
+| Agent | Tools | Primary Model |
+|---|---|---|
+| Web Search | Tavily, Bing API, scraper | GPT-4o-mini |
+| Data Analyst | Python REPL, pandas, matplotlib | GPT-4o |
+| Code Executor | Sandboxed Python, bash | GPT-4o |
+| Doc Generator | Template engine, PDF export | GPT-4o |
+
+## Key Implementation Details
+
+### LangGraph Workflow
+
+The entire multi-agent flow is a `StateGraph` where each node is either an agent or a router function. Edges are conditional, driven by the supervisor's routing decision.
+
+```python Supervisor Routing Logic
+from langgraph.graph import StateGraph, START, END
+from langchain_openai import ChatOpenAI
+from pydantic import BaseModel
+from typing import Literal
+
+class RouteDecision(BaseModel):
+    next_agent: Literal[
+        "web_search",
+        "data_analyst",
+        "code_executor",
+        "doc_generator",
+        "FINISH"
+    ]
+    reasoning: str
+
+supervisor_llm = ChatOpenAI(model="gpt-4o").with_structured_output(RouteDecision)
+
+def supervisor_node(state: AgentState):
+    decision = supervisor_llm.invoke([
+        {"role": "system", "content": SUPERVISOR_PROMPT},
+        *state["messages"]
+    ])
+    return {"next": decision.next_agent, "messages": []}
+
+def route_supervisor(state: AgentState):
+    return state["next"]
+```
+
+### Graph Construction and Checkpointing
+
+<CodeGroup>
+```python Graph Setup
+from langgraph.graph import StateGraph, START, END
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+
+builder = StateGraph(AgentState)
+
+# Add nodes
+builder.add_node("supervisor", supervisor_node)
+builder.add_node("web_search", web_search_agent)
+builder.add_node("data_analyst", data_analyst_agent)
+builder.add_node("code_executor", code_executor_agent)
+builder.add_node("doc_generator", doc_generator_agent)
+
+# Supervisor routes to specialists
+builder.add_conditional_edges(
+    "supervisor",
+    route_supervisor,
+    {
+        "web_search": "web_search",
+        "data_analyst": "data_analyst",
+        "code_executor": "code_executor",
+        "doc_generator": "doc_generator",
+        "FINISH": END,
+    }
+)
+
+# All specialists report back to supervisor
+for agent in ["web_search", "data_analyst", "code_executor", "doc_generator"]:
+    builder.add_edge(agent, "supervisor")
+
+builder.add_edge(START, "supervisor")
+```
+
+```python Checkpointer (Production)
+import psycopg
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+
+async def get_graph():
+    conn = await psycopg.AsyncConnection.connect(
+        DATABASE_URL, autocommit=True
+    )
+    checkpointer = AsyncPostgresSaver(conn)
+    await checkpointer.setup()
+    return builder.compile(
+        checkpointer=checkpointer,
+        interrupt_before=["code_executor"]  # Require approval before running code
+    )
+```
+</CodeGroup>
+
+### Streaming Progress via SSE
+
+Task progress is streamed to the frontend using Server-Sent Events. Each agent step emits an event so users see intermediate results as they arrive rather than waiting for the full task to complete.
+
+```python Streaming Endpoint
+from fastapi.responses import StreamingResponse
+import json
+
+@app.post("/tasks/{task_id}/stream")
+async def stream_task(task_id: str, user=Depends(get_current_user)):
+    graph = await get_graph()
+    config = {"configurable": {"thread_id": task_id}}
+
+    async def event_stream():
+        async for event in graph.astream_events(None, config=config, version="v2"):
+            if event["event"] == "on_chat_model_stream":
+                chunk = event["data"]["chunk"]
+                if chunk.content:
+                    yield f"data: {json.dumps({'type': 'token', 'content': chunk.content})}\n\n"
+            elif event["event"] == "on_chain_end":
+                node = event.get("name", "")
+                yield f"data: {json.dumps({'type': 'step_complete', 'node': node})}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+```
+
+## Challenges and Lessons Learned
+
+<AccordionGroup>
+  <Accordion title="Context Window Management" icon="window-maximize">
+    Long multi-agent conversations accumulate messages quickly. A research task with 10 back-and-forth cycles between the supervisor and specialists could easily hit 60K tokens — expensive and sometimes exceeding the model's context window entirely.
+
+    **Solution:** Implemented a message summarization step triggered when `len(messages) > 20`. The supervisor is prompted to produce a structured summary of completed work before the oldest messages are dropped. The summary is prepended as a system message so context is never fully lost.
+  </Accordion>
+  <Accordion title="Agent Loop Detection" icon="arrows-spin">
+    Early versions had a failure mode where the supervisor would ping-pong between two agents indefinitely — web search would return inconclusive results, the supervisor would ask for more research, and the cycle would repeat.
+
+    **Solution:** Added a `step_count` field to `AgentState` and a hard `max_iterations=15` guard in the routing function. When the limit is hit, the graph transitions to a `summarize_and_finish` node rather than continuing or crashing.
+  </Accordion>
+  <Accordion title="Observability with LangSmith" icon="magnifying-glass-chart">
+    Multi-agent flows are notoriously hard to debug from logs alone. A task might fail because the supervisor misrouted, a specialist returned bad output, or the routing condition hit an edge case — and stack traces don't tell you which.
+
+    **Solution:** LangSmith tracing was wired in from day one. Every task execution is a named run with the full agent graph visible as a tree. When a task fails, I can inspect every LLM call, its inputs, outputs, and latency in one view. This reduced debugging time from hours to minutes.
+  </Accordion>
+  <Accordion title="Human Approval via Async Webhook" icon="user-check">
+    Human-in-the-loop with LangGraph's `interrupt_before` pauses the graph and waits for resumption. The UX challenge: how do you wire up an async approval flow (user clicks "Approve" in the UI) to resume a paused LangGraph thread?
+
+    **Solution:** The paused thread ID is stored in PostgreSQL. When the user approves, the frontend calls `POST /tasks/{task_id}/approve`, which loads the graph with the same `thread_id` checkpointer config and calls `graph.invoke(None, config)` — LangGraph resumes from exactly where it left off.
+  </Accordion>
+</AccordionGroup>
+
+## Results
+
+<CardGroup cols={3}>
+  <Card title="Task Completion Rate" icon="circle-check" href="#results">
+    Approximately **92%** of tasks complete successfully without human intervention in testing, compared to the error-prone baseline of manual tool-stitching.
+  </Card>
+  <Card title="Time Savings" icon="clock" href="#results">
+    Complex research tasks reduced from **hours to minutes** — a competitive analysis that took around 3 hours manually runs in approximately 4–7 minutes.
+  </Card>
+  <Card title="P95 Latency" icon="gauge-high" href="#results">
+    Around **8 seconds** for simple single-agent tasks in testing. Multi-step tasks average 45–90 seconds depending on tool call count.
+  </Card>
+</CardGroup>
+
+<Tip>
+  If you're building multi-agent systems with LangGraph, wire in LangSmith tracing before you write your first agent node — not after. The visibility it gives you into intermediate steps is worth the 10 minutes of setup and will save you days of debugging.
+</Tip>

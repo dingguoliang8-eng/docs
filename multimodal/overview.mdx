@@ -1,120 +1,126 @@
 ---
-title: "Multimodal AI Systems: Architecture and Engineering Patterns"
-sidebarTitle: "Overview"
-description: "Multimodal AI engineering: combining speech, vision, and language models into unified pipelines for voice agents and document understanding."
+title: "多模态 AI：构建超越文本的系统"
+sidebarTitle: "概览"
+description: "多模态 AI 工程导览：将语音、视觉与语言模型组合为统一流水线。"
 ---
+现在的 AI 应用很少只剩文本。语音、图像、结构化数据常常要和语言模型串在一条链路里：音频转写、图像解析，再交给模型一起推理。这页先画地图，再讲怎么接。
 
-Modern AI applications increasingly combine multiple modalities — text, speech, vision, and structured data — into unified systems. Rather than a single model answering text queries, production-grade AI now orchestrates pipelines where audio is transcribed, images are parsed, and language models reason over all of it together. This page gives you a map of the multimodal landscape and the engineering patterns that tie it together.
+## 各模态各自干什么
 
-## Modality Overview
-
-Each modality brings its own tooling, latency profile, and failure modes. Understanding what lives in each bucket helps you pick the right architecture before you write a line of code.
+工具、延迟、失败模式都不一样。先分清，再选架构。
 
 <CardGroup cols={2}>
-  <Card title="Text" icon="file-lines" href="/llm-infra/overview">
-    The foundation. Large language models (LLMs) process and generate text — covered in depth elsewhere in this portfolio. Text is the lingua franca that most multimodal pipelines ultimately route through.
+  <Card title="文本" icon="file-lines">
+    基础。大语言模型（LLM）处理与生成文本——本作品集其他章节有深入覆盖。文本是多数多模态流水线最终汇聚的「通用语」。
   </Card>
-  <Card title="Speech" icon="microphone" href="/multimodal/asr-tts">
-    **ASR (Automatic Speech Recognition)** converts audio to text. **TTS (Text-to-Speech)** converts text back to audio. **Speaker diarization** attributes speech segments to individual speakers — essential for meeting transcription and multi-party voice agents.
+
+  <Card title="语音" icon="microphone">
+    **ASR（自动语音识别）** 将音频转为文本。**TTS（文本转语音）** 将文本转回音频。**说话人分离** 把语音片段归属到具体说话人——对会议转写与多方语音 Agent 至关重要。
   </Card>
-  <Card title="Vision" icon="eye" href="/multimodal/vision-language">
-    Vision models handle **image understanding** (captioning, VQA, classification), **document parsing** (OCR, table extraction, form understanding), and **video analysis** (frame-level reasoning, temporal understanding).
+
+  <Card title="视觉" icon="eye">
+    视觉模型处理**图像理解**（描述、VQA、分类）、**文档解析**（OCR、表格抽取、表单理解）与**视频分析**（帧级推理、时序理解）。
   </Card>
-  <Card title="Combined Pipelines" icon="layer-group" href="/agents/overview">
-    Combining modalities unlocks new application classes: **voice agents** (ASR → LLM → TTS), **multimodal chatbots** (text + image input), and **document Q&A with images** (PDFs containing charts, diagrams, and mixed layouts).
+
+  <Card title="组合" icon="layer-group">
+    组合模态解锁新应用类别：**语音 Agent**（ASR → LLM → TTS）、**多模态聊天机器人**（文本 \+ 图像输入）、**含图文档问答**（含图表、示意图与混合版式的 PDF）。
   </Card>
 </CardGroup>
 
-## Architecture Patterns for Multimodal Systems
+## 多模态系统的架构模式
 
-Three dominant patterns emerge when you need to wire multiple modalities together. Each trades off flexibility, latency, and engineering complexity differently.
+需要把多种模态接在一起时，有三种主流模式。各自在灵活性、延迟与工程复杂度上权衡不同。
 
 <AccordionGroup>
-  <Accordion title="1. Sequential Pipeline" icon="arrow-right">
-    Each modality is processed in order, with the output of one stage becoming the input of the next. A classic voice agent looks like:
+  <Accordion title="1. 顺序流水线" icon="arrow-right">
+    各模态按序处理，上一阶段输出成为下一阶段输入。经典语音 Agent 形如：
 
     ```text
     Audio Input → ASR → Text → LLM → Text → TTS → Audio Output
     ```
 
-    **Pros:** Simple to reason about, easy to swap individual components, each stage is independently testable.
+    **优点：** 易于推理、易替换单组件、各阶段可独立测试。
 
-    **Cons:** Latency compounds across stages. An error in an early stage (e.g., a bad transcription) propagates through the entire pipeline.
+    **缺点：** 延迟跨阶段累加。早期错误（如坏转写）会贯穿整条流水线。
 
-    Best for: voice agents, transcription workflows, audio summarization.
+    最适合：语音 Agent、转写工作流、音频摘要。
   </Accordion>
 
-  <Accordion title="2. Unified Model" icon="cube">
-    A single model natively handles multiple input modalities. Models like **GPT-4o** and **Gemini 1.5** accept text, images, and audio in a single API call and reason over all of them jointly.
+  <Accordion title="2. 统一模型" icon="cube">
+    单个模型原生处理多种输入模态。如 **GPT-4o** 与 **Gemini 1.5** 可在一次 API 调用中接受文本、图像与音频，并联合推理。
 
     ```text
     Text + Image + Audio → Unified Model → Text / Audio Output
     ```
 
-    **Pros:** Fewer moving parts, no alignment issues between stages, native cross-modal reasoning.
+    **优点：** 活动部件更少、无阶段对齐问题、原生跨模态推理。
 
-    **Cons:** Vendor lock-in, less control over individual modality quality, typically higher per-call cost.
+    **缺点：** 供应商锁定、对单模态质量控制更少、通常单次调用成本更高。
 
-    Best for: document Q&A with mixed content, real-time multimodal chat.
+    最适合：混合内容的文档问答、实时多模态聊天。
   </Accordion>
 
-  <Accordion title="3. Modality Router" icon="code-branch">
-    An upstream classifier detects the input modality and routes it to a specialized model optimized for that type.
+  <Accordion title="3. 模态路由器" icon="code-branch">
+    上游分类器检测输入模态，并路由到针对该类型优化的专用模型。
 
     ```text
     Input → Classifier → [ASR Model | Vision Model | Text LLM] → Output
     ```
 
-    **Pros:** Each modality gets the best-in-class model, allows fine-tuned specialists.
+    **优点：** 每种模态可用最佳模型，允许微调专家。
 
-    **Cons:** Requires a reliable classifier upfront; ambiguous inputs (e.g., a PDF with text and images) need special handling.
+    **缺点：** 需要可靠的前置分类器；模糊输入（如含文本与图像的 PDF）需特殊处理。
 
-    Best for: high-volume pipelines where you need to optimize cost and quality per modality.
+    最适合：需要按模态优化成本与质量的高流量流水线。
   </Accordion>
 </AccordionGroup>
 
-## Key Engineering Challenges
+## 关键工程挑战
 
 <Warning>
-  Multimodal systems multiply the surface area for bugs. A problem in any single modality — a misconfigured ASR model, an oversized image, a slow TTS call — can silently degrade the entire pipeline.
+  多模态系统放大了出 bug 的表面积。任一模态的问题——ASR 配置错误、过大图像、缓慢 TTS——都可能静默拖垮整条流水线。
 </Warning>
 
-**Latency** is the most visible challenge. Each model in your pipeline adds inference time. For voice agents, users expect a response within roughly **500ms of finishing their sentence** — that budget has to be split across VAD, ASR, LLM first-token, and TTS. Streaming and parallelism are not optional; they are requirements.
+**延迟**是最显眼的挑战。流水线中每个模型都增加推理时间。对语音 Agent，用户期望在说完后约 **500ms 内**得到响应——该预算要分给 VAD、ASR、LLM 首 Token 与 TTS。流式与并行不是可选项，而是硬需求。
 
-**Alignment** means ensuring each stage produces output in the exact format the next stage expects. An ASR model that returns word-level timestamps is useless to an LLM expecting plain text unless you strip that metadata. A TTS model that expects short strings will choke on a 2,000-token LLM response unless you chunk it. Document every contract between stages explicitly.
+**对齐**意味着确保每阶段输出格式正是下一阶段所期望的。返回词级时间戳的 ASR 对期望纯文本的 LLM 无用，除非你剥掉元数据。期望短字符串的 TTS 会噎在 2000 Token 的 LLM 响应上，除非你做切分。请显式记录阶段之间的契约。
 
-**Error propagation** is especially dangerous in sequential pipelines. An ASR error — a misheard word or hallucinated phrase — becomes a factual error in your LLM's context. The LLM has no way to know the transcription was wrong. Mitigation strategies include confidence thresholds, VAD quality gates, and asking the LLM to flag uncertainty when its input seems garbled.
+**错误传播**在顺序流水线中尤其危险。ASR 错误——听错词或幻觉短语——会变成 LLM 上下文中的事实错误。LLM 无法知道转写是错的。缓解策略包括置信度阈值、VAD 质量门控，以及在输入看起来乱码时让 LLM 标记不确定性。
 
-## Real-Time vs. Batch Processing
+## 实时 vs 批处理
 
-Not every multimodal workload has the same timing requirements. Choosing the right processing model upfront avoids costly rewrites later.
-
-<AccordionGroup>
-  <Accordion title="Real-Time (Streaming)" icon="bolt">
-    Voice agents and live transcription require **streaming pipelines** where audio is processed as it arrives. Key techniques: chunked audio capture, streaming ASR with partial transcripts, sentence-level TTS so speech starts before the LLM finishes generating.
-
-    Target: end-to-end latency **under 500ms** for a natural conversational feel.
-  </Accordion>
-  <Accordion title="Batch Processing" icon="database">
-    Document understanding, invoice parsing, and video analysis can run asynchronously. You get to use larger, more accurate models (Whisper large-v3, GPT-4o with high-detail vision) without worrying about real-time latency budgets.
-
-    Target: correctness and cost efficiency over speed.
-  </Accordion>
-</AccordionGroup>
-
-## Explore the Multimodal Stack
+并非每种多模态负载都有相同的时效要求。事先选对处理模型，可避免日后昂贵的重写。
 
 <CardGroup cols={2}>
-  <Card title="ASR & TTS" icon="waveform-lines" href="/multimodal/asr-tts">
-    Build voice-enabled applications with Whisper, FasterWhisper, and streaming TTS pipelines.
+  <Card title="实时（流式）" icon="bolt">
+    语音 Agent 与实时转写需要**流式流水线**，音频边到边处理。关键技巧：分块音频采集、带部分转写的流式 ASR、句级 TTS，以便 LLM 尚未生成完就开始播报。
+
+    目标：端到端延迟 **低于 500ms**，以获得自然对话感。
   </Card>
-  <Card title="Vision & Language" icon="image" href="/multimodal/vision-language">
-    Document understanding, image Q&A, and multimodal RAG with GPT-4o Vision and open-source VLMs.
+
+  <Card title="批处理" icon="database">
+    文档理解、发票解析与视频分析可异步运行。可用更大、更准的模型（Whisper large-v3、高细节视觉的 GPT-4o），而不必担心实时延迟预算。
+
+    目标：正确性与成本效率优先于速度。
   </Card>
+</CardGroup>
+
+## 探索多模态栈
+
+<CardGroup cols={2}>
+  <Card title="ASR 与 TTS" icon="waveform-lines" href="/multimodal/asr-tts">
+    用 Whisper、FasterWhisper 与流式 TTS 流水线构建语音应用。
+  </Card>
+
+  <Card title="视觉与语言" icon="image" href="/multimodal/vision-language">
+    用 GPT-4o Vision 与开源 VLM 做文档理解、图像问答与多模态 RAG。
+  </Card>
+
   <Card title="AI Agents" icon="robot" href="/agents/overview">
-    Orchestrate multimodal capabilities inside autonomous agent loops with tool use and memory.
+    在带工具使用与记忆的自主 Agent 循环中编排多模态能力。
   </Card>
-  <Card title="RAG Pipelines" icon="magnifying-glass" href="/rag/overview">
-    Extend retrieval-augmented generation to handle image-heavy documents and mixed-media corpora.
+
+  <Card title="RAG 流水线" icon="magnifying-glass" href="/rag/overview">
+    将检索增强生成扩展到含图文档与混合媒体语料。
   </Card>
 </CardGroup>

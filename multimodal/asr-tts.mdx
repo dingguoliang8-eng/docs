@@ -1,306 +1,45 @@
 ---
-title: "ASR and TTS: Voice-Enabled AI Application Engineering"
-sidebarTitle: "ASR & TTS"
-description: "Integrate ASR and TTS into AI applications. Covers Whisper, FasterWhisper, OpenAI TTS, CosyVoice, FishSpeech, and voice agent pipeline design."
+title: "ASR 与 TTS：构建语音驱动的 AI 应用"
+sidebarTitle: "ASR 与 TTS"
+description: "将 ASR/TTS 接入 AI 应用：Whisper、FasterWhisper、CosyVoice、FishSpeech 与语音 Agent 设计。"
 ---
+语音正在变成人和 AI 交互的主入口。做好语音应用，要同时搞定两头：**ASR** 把用户说话变成文本，**TTS** 把模型回复变成自然语音。生产里更敏感的是延迟。
 
-Voice interfaces are becoming a primary way users interact with AI — from real-time assistants to hands-free tools to accessibility applications. Building them well requires mastering two complementary components: **Automatic Speech Recognition (ASR)** to turn user audio into text your LLM can process, and **Text-to-Speech (TTS)** to turn your LLM's response back into natural audio. This page covers both, with a focus on latency-sensitive production deployments.
+## ASR
 
-## Automatic Speech Recognition (ASR)
+常见选择：
 
-ASR is the front door of any voice pipeline. The model you choose determines transcription accuracy, supported languages, inference speed, and deployment flexibility.
+- **Whisper**：开源基线，多语言、质量稳
+- **FasterWhisper**：CTranslate2 重实现，速度大约快 4 倍，自托管生产更常用
+- **Whisper.cpp**：偏 CPU / 边缘 / 隐私场景
+- **OpenAI Whisper API**：省运维，适合中低流量和快速验证
 
-### Model Options
+自托管默认更推荐 FasterWhisper，并打开 VAD；但 VAD 阈值太猛会切掉真实语音头尾，上线前用真实音频测。
 
-<AccordionGroup>
-  <Accordion title="OpenAI Whisper" icon="globe">
-    The industry-standard open-source ASR model. Supports **99 languages**, multiple model sizes (tiny → large-v3), and produces highly accurate transcriptions including punctuation. The baseline against which most other models are benchmarked.
-  </Accordion>
-  <Accordion title="FasterWhisper" icon="bolt">
-    A reimplementation of Whisper using **CTranslate2**, achieving the same accuracy at roughly **4× the speed** with lower memory usage. The go-to choice for production deployments where GPU time matters.
-  </Accordion>
-  <Accordion title="Whisper.cpp" icon="microchip">
-    A C/C++ port of Whisper optimized for **CPU inference**. Runs on edge devices, Raspberry Pi, and local laptops without a GPU. Ideal for offline or privacy-sensitive deployments.
-  </Accordion>
-  <Accordion title="OpenAI Whisper API" icon="cloud">
-    The managed API version. No infrastructure to maintain, charges per minute of audio. Best for low-to-medium volume use cases or rapid prototyping before committing to self-hosted infrastructure.
-  </Accordion>
-</AccordionGroup>
+## TTS
 
-### FasterWhisper — Self-Hosted Transcription
+- **OpenAI TTS**：声音稳定，可流式 PCM，多数产品默认够用
+- **CosyVoice / FishSpeech**：开源，可克隆音色，中文场景常见
+- **ElevenLabs**：自然度高，成本和延迟通常更高，更适合内容生成而非实时对话
 
-FasterWhisper is the recommended default for any self-hosted deployment. It runs on a single GPU, supports Voice Activity Detection (VAD) out of the box, and returns word-level timestamps.
+实时场景不要等整段生成完再播：按句切分送 TTS，第一句就能先响。
 
-```python title="faster_whisper_transcribe.py"
-from faster_whisper import WhisperModel
+## 语音 Agent 流水线
 
-model = WhisperModel("large-v3", device="cuda", compute_type="float16")
+1. 采音（浏览器 WebRTC / 服务端 PyAudio）——建议 16kHz mono
+2. VAD 判断说完
+3. ASR 转写
+4. LLM 流式生成（带历史）
+5. 按句 TTS
+6. 播放 PCM
 
-segments, info = model.transcribe(
-    "audio.mp3",
-    language="en",
-    vad_filter=True,  # Voice Activity Detection
-    beam_size=5
-)
+## 延迟预算（目标端到端低于 500ms）
 
-for segment in segments:
-    print(f"[{segment.start:.2f}s - {segment.end:.2f}s] {segment.text}")
-```
+| 阶段 | 目标 |
+| --- | --- |
+| VAD | 低于 50ms |
+| ASR | 低于 200ms（实时可用小模型） |
+| LLM 首 Token | 低于 300ms |
+| TTS 首包音频 | 低于 200ms |
 
-<Warning>
-  **VAD tuning matters.** The `vad_filter=True` parameter uses Silero VAD to strip silence before transcription — this dramatically reduces hallucinations on quiet audio. However, if VAD thresholds are too aggressive, it will cut off the beginning or end of real speech. Test with your actual audio source before going to production.
-</Warning>
-
-### OpenAI Whisper API — Managed Transcription
-
-When you don't want to manage GPU infrastructure, the Whisper API gives you large-v3-class accuracy with a simple HTTP call.
-
-```python title="whisper_api_transcribe.py"
-from openai import OpenAI
-
-client = OpenAI()
-
-with open("audio.mp3", "rb") as audio_file:
-    transcript = client.audio.transcriptions.create(
-        model="whisper-1",
-        file=audio_file,
-        language="en"
-    )
-
-print(transcript.text)
-```
-
-<Note>
-  The Whisper API accepts MP3, MP4, MPEG, MPGA, M4A, WAV, and WEBM formats up to 25MB. For longer recordings, split the audio into chunks on silence boundaries before sending.
-</Note>
-
-## Text-to-Speech (TTS)
-
-TTS is the last mile of your voice pipeline — it determines how natural your AI sounds and how quickly users hear a response. The right choice depends on your latency budget, quality requirements, and whether you need voice cloning.
-
-### Model Options
-
-<AccordionGroup>
-  <Accordion title="OpenAI TTS API" icon="cloud">
-    Six voices (alloy, echo, fable, onyx, nova, shimmer), consistent quality, supports streaming PCM output for real-time playback. Best default choice for most production applications.
-  </Accordion>
-  <Accordion title="CosyVoice" icon="code">
-    Open-source TTS from Alibaba DAMO Academy. Supports **voice cloning** with a short reference clip, multilingual (Chinese, English, Japanese, Cantonese), and fine-tunable for custom voices.
-  </Accordion>
-  <Accordion title="FishSpeech" icon="fish">
-    Open-source, extremely fast inference — one of the quickest open-source TTS models available. Supports voice cloning and produces natural-sounding output with minimal latency.
-  </Accordion>
-  <Accordion title="ElevenLabs" icon="wand-magic-sparkles">
-    Premium managed TTS with the most natural-sounding voices on the market. Supports voice cloning, emotion control, and multilingual synthesis. Higher latency and cost than OpenAI TTS — best for content generation rather than real-time agents.
-  </Accordion>
-</AccordionGroup>
-
-### OpenAI TTS — Standard File Output
-
-For non-real-time use cases like generating audio files, podcast clips, or pre-recorded responses:
-
-```python title="openai_tts_file.py"
-from openai import OpenAI
-
-client = OpenAI()
-
-response = client.audio.speech.create(
-    model="tts-1",
-    voice="alloy",
-    input="Hello! I'm your AI assistant. How can I help you today?"
-)
-
-response.stream_to_file("output.mp3")
-```
-
-### OpenAI TTS — Streaming for Real-Time Playback
-
-For voice agents, you want to start playing audio before the entire response is synthesized. Use PCM streaming to pipe audio bytes directly to your output device as they arrive:
-
-```python title="openai_tts_streaming.py"
-from openai import OpenAI
-
-client = OpenAI()
-
-response = client.audio.speech.create(
-    model="tts-1",
-    voice="alloy",
-    input=text,
-    response_format="pcm"  # Raw PCM for real-time playback
-)
-
-# Stream PCM bytes directly to audio output
-for chunk in response.iter_bytes(chunk_size=4096):
-    audio_output.write(chunk)
-```
-
-<Tip>
-  For streaming TTS, split your LLM output on sentence boundaries (`. `, `? `, `! `) before sending each chunk to TTS. This way the user starts hearing the first sentence while the LLM is still generating the second — cutting perceived latency significantly without any change to your LLM call.
-</Tip>
-
-## Building a Voice Agent Pipeline
-
-A production voice agent connects all of these components into a low-latency loop. Here's the complete end-to-end flow:
-
-<Steps>
-  <Step title="Capture Audio from Microphone">
-    Use **WebRTC** (for browser-based agents) or **PyAudio / sounddevice** (for server-side agents) to capture raw audio from the user's microphone. Target 16kHz mono PCM — the format Whisper expects natively.
-
-    ```python title="capture_audio.py"
-    import sounddevice as sd
-    import numpy as np
-
-    SAMPLE_RATE = 16000
-    CHANNELS = 1
-
-    def record_chunk(duration_seconds: float) -> np.ndarray:
-        audio = sd.rec(
-            int(duration_seconds * SAMPLE_RATE),
-            samplerate=SAMPLE_RATE,
-            channels=CHANNELS,
-            dtype="float32"
-        )
-        sd.wait()
-        return audio.flatten()
-    ```
-  </Step>
-
-  <Step title="Detect Voice Activity (VAD)">
-    Use **Silero VAD** or Whisper's built-in `vad_filter` to detect when the user has finished speaking. Without this, you either cut the user off mid-sentence or wait too long before transcribing.
-
-    ```python title="vad_detection.py"
-    import torch
-
-    vad_model, utils = torch.hub.load(
-        repo_or_dir="snakers4/silero-vad",
-        model="silero_vad"
-    )
-    get_speech_timestamps, _, read_audio, *_ = utils
-
-    audio = read_audio("chunk.wav", sampling_rate=16000)
-    timestamps = get_speech_timestamps(audio, vad_model, sampling_rate=16000)
-
-    has_speech = len(timestamps) > 0
-    ```
-  </Step>
-
-  <Step title="Transcribe with ASR">
-    Once VAD signals end-of-speech, send the audio buffer to your ASR model. For real-time agents, FasterWhisper on a local GPU delivers the fastest round-trip; for managed deployments, use the Whisper API.
-
-    ```python title="transcribe_chunk.py"
-    from faster_whisper import WhisperModel
-
-    asr_model = WhisperModel("base.en", device="cuda", compute_type="float16")
-
-    def transcribe(audio_path: str) -> str:
-        segments, _ = asr_model.transcribe(audio_path, vad_filter=True)
-        return " ".join(seg.text.strip() for seg in segments)
-    ```
-  </Step>
-
-  <Step title="Process with LLM Agent">
-    Pass the transcribed text to your LLM — with full conversation history for context. Use **streaming** so you can begin TTS as soon as the first sentence is complete.
-
-    ```python title="llm_streaming.py"
-    from openai import OpenAI
-
-    client = OpenAI()
-
-    def stream_llm_response(user_text: str, history: list) -> str:
-        history.append({"role": "user", "content": user_text})
-        stream = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=history,
-            stream=True
-        )
-        full_response = ""
-        for chunk in stream:
-            delta = chunk.choices[0].delta.content or ""
-            full_response += delta
-            yield delta  # Yield tokens for sentence-level TTS
-        return full_response
-    ```
-  </Step>
-
-  <Step title="Convert to Speech with TTS">
-    Buffer the LLM token stream and flush to TTS at each sentence boundary. This starts audio playback within 300–500ms of the LLM's first token rather than waiting for the full response.
-
-    ```python title="streaming_tts.py"
-    from openai import OpenAI
-
-    client = OpenAI()
-
-    def speak_sentence(sentence: str, audio_output):
-        response = client.audio.speech.create(
-            model="tts-1",
-            voice="nova",
-            input=sentence,
-            response_format="pcm"
-        )
-        for chunk in response.iter_bytes(chunk_size=4096):
-            audio_output.write(chunk)
-
-    def stream_tts(token_generator, audio_output):
-        buffer = ""
-        for token in token_generator:
-            buffer += token
-            # Flush on sentence boundaries
-            for delimiter in (". ", "? ", "! ", "\n"):
-                if delimiter in buffer:
-                    sentence, buffer = buffer.split(delimiter, 1)
-                    speak_sentence(sentence + delimiter.strip(), audio_output)
-        if buffer.strip():
-            speak_sentence(buffer, audio_output)
-    ```
-  </Step>
-
-  <Step title="Play Audio to User">
-    Write the PCM stream from TTS directly to your audio output device. For browser deployments, use the Web Audio API to consume the PCM stream as it arrives.
-
-    ```python title="play_audio.py"
-    import sounddevice as sd
-    import numpy as np
-
-    SAMPLE_RATE = 24000  # OpenAI TTS PCM output rate
-
-    def play_pcm_stream(pcm_bytes: bytes):
-        audio_array = np.frombuffer(pcm_bytes, dtype=np.int16).astype(np.float32)
-        audio_array /= 32768.0  # Normalize to [-1, 1]
-        sd.play(audio_array, samplerate=SAMPLE_RATE)
-        sd.wait()
-    ```
-  </Step>
-</Steps>
-
-## Latency Optimization
-
-Hitting sub-500ms end-to-end latency is achievable but requires deliberate attention to every stage of the pipeline.
-
-<AccordionGroup>
-  <Accordion title="Sentence-Level TTS" icon="scissors">
-    Start speaking each sentence as it's generated rather than waiting for the full LLM response. This alone cuts perceived latency by 1–3 seconds for medium-length responses.
-  </Accordion>
-  <Accordion title="Pre-Warm Models" icon="fire">
-    Keep ASR and TTS models loaded in memory between turns. Cold-loading Whisper large-v3 takes 2–4 seconds — unacceptable mid-conversation. Use a persistent process or model server.
-  </Accordion>
-  <Accordion title="Right-Size Your Models" icon="sliders">
-    Use `whisper-base.en` or `whisper-small.en` for real-time streaming where 200ms ASR latency is required. Reserve `large-v3` for async transcription tasks where accuracy matters more than speed.
-  </Accordion>
-  <Accordion title="Overlap Stages" icon="layer-group">
-    Start streaming the LLM response before TTS is initialized. Use async/await or threads to run VAD, ASR, and LLM calls concurrently wherever dependencies allow.
-  </Accordion>
-</AccordionGroup>
-
-### Target Latency Budget
-
-| Stage | Target | Notes |
-|---|---|---|
-| VAD (end-of-speech detection) | &lt;50ms | Silero VAD is near-instantaneous |
-| ASR transcription | &lt;200ms | Use whisper-base.en on GPU |
-| LLM first token | &lt;300ms | Use a fast model (gpt-4o-mini, Groq) |
-| TTS first audio chunk | &lt;200ms | Sentence-level, streaming PCM |
-| **End-to-end** | **&lt;500ms** | Natural conversational latency |
-
-<Info>
-  These targets are achievable with self-hosted ASR (FasterWhisper on GPU), a fast LLM API (Groq or OpenAI), and streaming TTS. Fully managed pipelines with round-trip API calls will typically land in the 800ms–1.5s range — still acceptable for many use cases, but noticeably slower in conversation.
-</Info>
+模型常驻内存、按句播报、能并行的阶段就并行。全托管链路常见 800ms 到 1.5s，也能用，但对话感会差一截。

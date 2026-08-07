@@ -20,42 +20,42 @@
               {
                 "group": "简介",
                 "pages": [
-                  "zh/introduction",
-                  "zh/about"
+                  "introduction",
+                  "about"
                 ]
               },
               {
                 "group": "AI Agents",
                 "pages": [
-                  "zh/agents/overview",
-                  "zh/agents/langgraph",
-                  "zh/agents/multi-agent",
-                  "zh/agents/tool-use"
+                  "agents/overview",
+                  "agents/langgraph",
+                  "agents/tool-use",
+                  "agents/multi-agent"
                 ]
               },
               {
                 "group": "RAG 工程",
                 "pages": [
-                  "zh/rag/overview",
-                  "zh/rag/embeddings",
-                  "zh/rag/retrieval-reranking",
-                  "zh/rag/advanced-patterns"
+                  "rag/overview",
+                  "rag/retrieval-reranking",
+                  "rag/embeddings",
+                  "rag/advanced-patterns"
                 ]
               },
               {
                 "group": "LLM 基础设施",
                 "pages": [
-                  "zh/llm-infra/overview",
-                  "zh/llm-infra/deployment",
-                  "zh/llm-infra/saas-architecture"
+                  "llm-infra/overview",
+                  "llm-infra/deployment",
+                  "llm-infra/saas-architecture"
                 ]
               },
               {
                 "group": "多模态 AI",
                 "pages": [
-                  "zh/multimodal/overview",
-                  "zh/multimodal/asr-tts",
-                  "zh/multimodal/vision-language"
+                  "multimodal/overview",
+                  "multimodal/asr-tts",
+                  "multimodal/vision-language"
                 ]
               }
             ]
@@ -66,18 +66,18 @@
               {
                 "group": "项目",
                 "pages": [
-                  "zh/projects/overview",
-                  "zh/projects/ai-agent-platform",
-                  "zh/projects/rag-pipeline",
-                  "zh/projects/llm-saas"
+                  "projects/overview",
+                  "projects/ai-agent-platform",
+                  "projects/rag-pipeline",
+                  "projects/llm-saas"
                 ]
               },
               {
                 "group": "工程笔记",
                 "pages": [
-                  "zh/notes/lessons-learned",
-                  "zh/notes/llm-gotchas",
-                  "zh/notes/performance-tips"
+                  "notes/lessons-learned",
+                  "notes/llm-gotchas",
+                  "notes/performance-tips"
                 ]
               }
             ]
@@ -93,42 +93,42 @@
               {
                 "group": "Introduction",
                 "pages": [
-                  "introduction",
-                  "about"
+                  "en/introduction",
+                  "en/about"
                 ]
               },
               {
                 "group": "AI Agents",
                 "pages": [
-                  "agents/overview",
-                  "agents/langgraph",
-                  "agents/multi-agent",
-                  "agents/tool-use"
+                  "en/agents/overview",
+                  "en/agents/multi-agent",
+                  "en/agents/tool-use",
+                  "en/agents/langgraph"
                 ]
               },
               {
                 "group": "RAG Engineering",
                 "pages": [
-                  "rag/overview",
-                  "rag/embeddings",
-                  "rag/retrieval-reranking",
-                  "rag/advanced-patterns"
+                  "en/rag/overview",
+                  "en/rag/embeddings",
+                  "en/rag/advanced-patterns",
+                  "en/rag/retrieval-reranking"
                 ]
               },
               {
                 "group": "LLM Infrastructure",
                 "pages": [
-                  "llm-infra/overview",
-                  "llm-infra/deployment",
-                  "llm-infra/saas-architecture"
+                  "en/llm-infra/overview",
+                  "en/llm-infra/saas-architecture",
+                  "en/llm-infra/deployment"
                 ]
               },
               {
                 "group": "Multimodal AI",
                 "pages": [
-                  "multimodal/overview",
-                  "multimodal/asr-tts",
-                  "multimodal/vision-language"
+                  "en/multimodal/overview",
+                  "en/multimodal/asr-tts",
+                  "en/multimodal/vision-language"
                 ]
               }
             ]
@@ -139,18 +139,18 @@
               {
                 "group": "Projects",
                 "pages": [
-                  "projects/overview",
-                  "projects/ai-agent-platform",
-                  "projects/rag-pipeline",
-                  "projects/llm-saas"
+                  "en/projects/overview",
+                  "en/projects/rag-pipeline",
+                  "en/projects/ai-agent-platform",
+                  "en/projects/llm-saas"
                 ]
               },
               {
                 "group": "Engineering Notes",
                 "pages": [
-                  "notes/lessons-learned",
-                  "notes/llm-gotchas",
-                  "notes/performance-tips"
+                  "en/notes/lessons-learned",
+                  "en/notes/llm-gotchas",
+                  "en/notes/performance-tips"
                 ]
               }
             ]
@@ -170,5 +170,122 @@
       "github": "https://github.com/dingguoliang",
       "linkedin": "https://linkedin.com/in/dingguoliang"
     }
-  }
+  },
+  "redirects": [
+    {
+      "source": "/zh/introduction",
+      "destination": "/introduction",
+      "permanent": true
+    },
+    {
+      "source": "/zh/agents/overview",
+      "destination": "/agents/overview",
+      "permanent": true
+    },
+    {
+      "source": "/zh/agents/langgraph",
+      "destination": "/agents/langgraph",
+      "permanent": true
+    },
+    {
+      "source": "/zh/agents/multi-agent",
+      "destination": "/agents/multi-agent",
+      "permanent": true
+    },
+    {
+      "source": "/zh/agents/tool-use",
+      "destination": "/agents/tool-use",
+      "permanent": true
+    },
+    {
+      "source": "/zh/rag/overview",
+      "destination": "/rag/overview",
+      "permanent": true
+    },
+    {
+      "source": "/zh/rag/embeddings",
+      "destination": "/rag/embeddings",
+      "permanent": true
+    },
+    {
+      "source": "/zh/rag/retrieval-reranking",
+      "destination": "/rag/retrieval-reranking",
+      "permanent": true
+    },
+    {
+      "source": "/zh/llm-infra/overview",
+      "destination": "/llm-infra/overview",
+      "permanent": true
+    },
+    {
+      "source": "/zh/rag/advanced-patterns",
+      "destination": "/rag/advanced-patterns",
+      "permanent": true
+    },
+    {
+      "source": "/zh/llm-infra/deployment",
+      "destination": "/llm-infra/deployment",
+      "permanent": true
+    },
+    {
+      "source": "/zh/llm-infra/saas-architecture",
+      "destination": "/llm-infra/saas-architecture",
+      "permanent": true
+    },
+    {
+      "source": "/zh/multimodal/overview",
+      "destination": "/multimodal/overview",
+      "permanent": true
+    },
+    {
+      "source": "/zh/multimodal/asr-tts",
+      "destination": "/multimodal/asr-tts",
+      "permanent": true
+    },
+    {
+      "source": "/zh/projects/overview",
+      "destination": "/projects/overview",
+      "permanent": true
+    },
+    {
+      "source": "/zh/multimodal/vision-language",
+      "destination": "/multimodal/vision-language",
+      "permanent": true
+    },
+    {
+      "source": "/zh/projects/rag-pipeline",
+      "destination": "/projects/rag-pipeline",
+      "permanent": true
+    },
+    {
+      "source": "/zh/notes/lessons-learned",
+      "destination": "/notes/lessons-learned",
+      "permanent": true
+    },
+    {
+      "source": "/zh/projects/ai-agent-platform",
+      "destination": "/projects/ai-agent-platform",
+      "permanent": true
+    },
+    {
+      "source": "/zh/projects/llm-saas",
+      "destination": "/projects/llm-saas",
+      "permanent": true
+    },
+    {
+      "source": "/zh/notes/llm-gotchas",
+      "destination": "/notes/llm-gotchas",
+      "permanent": true
+    },
+    {
+      "source": "/zh/notes/performance-tips",
+      "destination": "/notes/performance-tips",
+      "permanent": true
+    },
+    {
+      "source": "/zh/about",
+      "destination": "/about",
+      "permanent": true
+    }
+  ]
 }
