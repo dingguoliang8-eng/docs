@@ -143,16 +143,16 @@ Chunking is often **more impactful than the choice of embedding model**. If your
 Your vector store is responsible for persisting embeddings and executing similarity queries at low latency. Each option has different trade-offs between operational simplicity, performance, and cost.
 
 <CardGroup cols={2}>
-  <Card title="Qdrant" icon="database">
+  <Card title="Qdrant" icon="database" href="https://qdrant.tech/documentation/">
     **Recommended for production.** Written in Rust for high throughput. Rich payload filtering, sparse vector support, on-disk indexing, and a convenient Docker image. Supports hybrid search natively.
   </Card>
-  <Card title="Chroma" icon="laptop-code">
+  <Card title="Chroma" icon="laptop-code" href="https://docs.trychroma.com/">
     **Best for local development.** Zero-config, runs in-process or as a server, and integrates with LangChain in a single line. Not recommended for high-concurrency production workloads.
   </Card>
-  <Card title="Pinecone" icon="cloud">
+  <Card title="Pinecone" icon="cloud" href="https://docs.pinecone.io/">
     **Fully managed and serverless.** No infrastructure to operate — ideal if you want to focus on the application layer. Pricing scales with index size and query volume.
   </Card>
-  <Card title="pgvector" icon="elephant">
+  <Card title="pgvector" icon="elephant" href="https://github.com/pgvector/pgvector">
     **Best if you're already on PostgreSQL.** Adds vector similarity search as a Postgres extension. Simplifies your stack if you don't want to operate a separate vector database.
   </Card>
 </CardGroup>
@@ -162,7 +162,7 @@ Your vector store is responsible for persisting embeddings and executing similar
 ```python title="qdrant_setup.py"
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams
-from langchain_community.vectorstores import Qdrant
+from langchain_qdrant import QdrantVectorStore
 
 # Create a collection (run once)
 client = QdrantClient(url="http://localhost:6333")
@@ -172,10 +172,10 @@ client.create_collection(
 )
 
 # Connect LangChain to the collection
-vectorstore = Qdrant(
+vectorstore = QdrantVectorStore(
     client=client,
     collection_name="docs",
-    embeddings=embeddings
+    embedding=embeddings
 )
 
 # Index documents

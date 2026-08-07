@@ -85,15 +85,20 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 
 # In-memory: great for development and testing
 memory = MemorySaver()
-
-# SQLite: persistent across process restarts
-db = SqliteSaver.from_conn_string("checkpoints.db")
-
 graph = builder.compile(checkpointer=memory)
+
+# SQLite: persistent across process restarts.
+# from_conn_string is a context manager — always use it with `with`.
+with SqliteSaver.from_conn_string("checkpoints.db") as db:
+    persistent_graph = builder.compile(checkpointer=db)
+    result = persistent_graph.invoke(
+        {"messages": [HumanMessage(content="Hello")]},
+        config={"configurable": {"thread_id": "session-1"}},
+    )
 ```
 
 <Warning>
-  `MemorySaver` is lost when your process exits. Use `SqliteSaver` (local) or a production-grade checkpointer (PostgreSQL via `langgraph-checkpoint-postgres`) for any workflow that needs to survive restarts or serve multiple users concurrently.
+  `MemorySaver` is lost when your process exits. Use `SqliteSaver` (local) or a production-grade checkpointer (PostgreSQL via `langgraph-checkpoint-postgres`) for any workflow that needs to survive restarts or serve multiple users concurrently. Note that `SqliteSaver.from_conn_string` is a **context manager** — passing it without `with` returns a generator object, not a checkpointer, causing a runtime error.
 </Warning>
 
 ---
@@ -247,30 +252,31 @@ LangGraph's interrupt mechanism lets you **pause** graph execution before or aft
 
 ```python agents/human_in_loop.py
 from langgraph.checkpoint.sqlite import SqliteSaver
+from langchain_core.messages import HumanMessage
 
-db = SqliteSaver.from_conn_string("hitl.db")
+# SqliteSaver.from_conn_string is a context manager — use it with `with`
+with SqliteSaver.from_conn_string("hitl.db") as db:
+    # Interrupt BEFORE the "tools" node runs — let a human approve the tool call
+    hitl_graph = builder.compile(
+        checkpointer=db,
+        interrupt_before=["tools"],
+    )
 
-# Interrupt BEFORE the "tools" node runs — let a human approve the tool call
-graph = builder.compile(
-    checkpointer=db,
-    interrupt_before=["tools"],
-)
+    config = {"configurable": {"thread_id": "hitl-session-1"}}
 
-config = {"configurable": {"thread_id": "hitl-session-1"}}
+    # Run until the interrupt
+    state = hitl_graph.invoke(
+        {"messages": [HumanMessage(content="Delete all files in /tmp")]},
+        config=config,
+    )
 
-# Run until the interrupt
-state = graph.invoke(
-    {"messages": [HumanMessage(content="Delete all files in /tmp")]},
-    config=config,
-)
+    # Inspect pending tool calls
+    pending = state["messages"][-1].tool_calls
+    print("Pending tool calls:", pending)
 
-# Inspect pending tool calls
-pending = state["messages"][-1].tool_calls
-print("Pending tool calls:", pending)
-
-# Human approves → resume by passing None (no state change needed)
-final = graph.invoke(None, config=config)
-print(final["messages"][-1].content)
+    # Human approves → resume by passing None (no state change needed)
+    final = hitl_graph.invoke(None, config=config)
+    print(final["messages"][-1].content)
 ```
 
 <Tip>

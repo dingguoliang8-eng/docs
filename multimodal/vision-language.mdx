@@ -8,26 +8,26 @@ Vision-language models (VLMs) open up a new class of AI applications — from un
 
 ## Vision-Language Model Options
 
-<CardGroup cols={2}>
-  <Card title="GPT-4o" icon="star">
+<AccordionGroup>
+  <Accordion title="GPT-4o" icon="star">
     Best-in-class vision understanding across a wide range of tasks. Handles complex documents with mixed layouts, tables, handwriting, and diagrams. The default choice when accuracy matters most and cost is secondary.
-  </Card>
-  <Card title="Claude 3.5 Sonnet" icon="feather">
+  </Accordion>
+  <Accordion title="Claude 3.5 Sonnet" icon="feather">
     Strong at **document understanding** and structured data extraction. Particularly reliable at following complex extraction instructions and producing well-formatted JSON output from document images.
-  </Card>
-  <Card title="Gemini 1.5 Pro" icon="gem">
+  </Accordion>
+  <Accordion title="Gemini 1.5 Pro" icon="gem">
     Long-context multimodal model — accepts up to **1M tokens** with native video frame support. Best for analyzing long documents, video content, or sequences of related images within a single context window.
-  </Card>
-  <Card title="Qwen-VL / Qwen2-VL" icon="globe">
+  </Accordion>
+  <Accordion title="Qwen-VL / Qwen2-VL" icon="globe">
     Open-source VLM from Alibaba with strong **multilingual document understanding** — especially Chinese, Japanese, and Arabic. Self-hostable, available on Ollama and Hugging Face, and competitive with proprietary models on document tasks.
-  </Card>
-  <Card title="LLaVA" icon="code">
+  </Accordion>
+  <Accordion title="LLaVA" icon="code">
     Lightweight open-source VLM designed for **custom deployment**. Multiple sizes (7B, 13B, 34B) make it runnable on modest hardware. Best for applications requiring on-premise deployment or fine-tuning on domain-specific images.
-  </Card>
-  <Card title="ColPali" icon="file-image">
+  </Accordion>
+  <Accordion title="ColPali" icon="file-image">
     A specialized model for **document retrieval** — embeds full document page images directly without OCR. Designed for multimodal RAG where you want to retrieve relevant pages from a corpus of PDFs.
-  </Card>
-</CardGroup>
+  </Accordion>
+</AccordionGroup>
 
 ## Image Input Patterns
 
@@ -352,11 +352,11 @@ print(f"Text present: {summary.text_present}")
 ```
 </CodeGroup>
 
-<CardGroup cols={2}>
-  <Card title="LLaVA 13B" icon="server">
+<AccordionGroup>
+  <Accordion title="LLaVA 13B" icon="server">
     Best for general image understanding on a single consumer GPU (16GB VRAM). Handles scene description, object detection questions, and basic document reading.
-  </Card>
-  <Card title="Qwen2-VL 7B" icon="globe">
+  </Accordion>
+  <Accordion title="Qwen2-VL 7B" icon="globe">
     Stronger than LLaVA on document and multilingual tasks. Recommended when your documents contain non-Latin scripts or complex table layouts.
-  </Card>
-</CardGroup>
+  </Accordion>
+</AccordionGroup>

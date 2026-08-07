@@ -1,7 +1,7 @@
 ---
 title: "AI Agent Platform: Multi-Agent Task Execution System"
 sidebarTitle: "Agent Platform"
-description: "Design and implementation of a multi-agent task execution platform using LangGraph, featuring autonomous workflows, tool use, and human-in-the-loop approval."
+description: "How I built a multi-agent task execution platform with LangGraph — supervisor routing, tool use, human-in-the-loop approval, and PostgreSQL checkpointing."
 ---
 
 This project is a general-purpose multi-agent platform where users define tasks in natural language, and a supervisor agent delegates to specialized worker agents. I built it because users kept asking for a way to run complex research and analysis workflows without writing any code — they wanted to describe the task and get a result. The platform is the answer to that ask.
@@ -9,16 +9,16 @@ This project is a general-purpose multi-agent platform where users define tasks 
 ## System Overview
 
 <CardGroup cols={2}>
-  <Card title="The Problem" icon="triangle-exclamation">
+  <Card title="The Problem" icon="triangle-exclamation" href="#system-overview">
     Users needed to execute complex multi-step research and analysis tasks — competitive analysis, document summarization, data extraction, report generation — without writing code or stitching together tools manually.
   </Card>
-  <Card title="The Solution" icon="check">
+  <Card title="The Solution" icon="check" href="#system-overview">
     A supervisor + specialist agent architecture where a GPT-4o supervisor routes sub-tasks to domain-specific worker agents, with explicit human checkpoints before any high-stakes action is taken.
   </Card>
 </CardGroup>
 
 <Info>
-  The platform handles **50–100 concurrent task executions** with per-task LangGraph state isolated in PostgreSQL. Each task is independently resumable after a human approval interrupt.
+  In testing, the platform sustained **50–100 concurrent task executions** with per-task LangGraph state isolated in PostgreSQL. Each task is independently resumable after a human approval interrupt.
 </Info>
 
 ## Architecture
@@ -197,14 +197,14 @@ async def stream_task(task_id: str, user=Depends(get_current_user)):
 ## Results
 
 <CardGroup cols={3}>
-  <Card title="Task Completion Rate" icon="circle-check">
-    **92%** of tasks complete successfully without human intervention, compared to the baseline of manual tool-stitching.
+  <Card title="Task Completion Rate" icon="circle-check" href="#results">
+    Approximately **92%** of tasks complete successfully without human intervention in testing, compared to the error-prone baseline of manual tool-stitching.
   </Card>
-  <Card title="Time Savings" icon="clock">
-    Complex research tasks reduced from **hours to minutes** — a competitive analysis that took 3 hours manually runs in 4–7 minutes.
+  <Card title="Time Savings" icon="clock" href="#results">
+    Complex research tasks reduced from **hours to minutes** — a competitive analysis that took around 3 hours manually runs in approximately 4–7 minutes.
   </Card>
-  <Card title="P95 Latency" icon="gauge-high">
-    **8 seconds** for simple single-agent tasks. Multi-step tasks average 45–90 seconds depending on tool call count.
+  <Card title="P95 Latency" icon="gauge-high" href="#results">
+    Around **8 seconds** for simple single-agent tasks in testing. Multi-step tasks average 45–90 seconds depending on tool call count.
   </Card>
 </CardGroup>
 

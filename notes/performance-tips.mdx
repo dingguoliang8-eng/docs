@@ -266,6 +266,7 @@ Key principles for streaming UX:
 
 For self-hosted inference at scale, vLLM is the standard. These are the configuration knobs that actually matter:
 
+<AccordionGroup>
 <Accordion title="--max-num-seqs: Maximum Concurrent Sequences">
   Controls how many requests vLLM processes in parallel. Higher values increase
   throughput but also increase memory pressure and per-request latency.
@@ -333,3 +334,4 @@ For self-hosted inference at scale, vLLM is the standard. These are the configur
   balancer often gives better throughput than tensor parallelism across multiple
   GPUs.
 </Accordion>
+</AccordionGroup>

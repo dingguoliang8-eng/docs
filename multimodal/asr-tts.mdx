@@ -1,7 +1,7 @@
 ---
-title: "ASR and TTS: Build Voice-Enabled AI Applications"
+title: "ASR and TTS: Voice-Enabled AI Application Engineering"
 sidebarTitle: "ASR & TTS"
-description: "Integrate Automatic Speech Recognition and Text-to-Speech into AI applications. Covers Whisper, FasterWhisper, CosyVoice, FishSpeech, and voice agent design."
+description: "Integrate ASR and TTS into AI applications. Covers Whisper, FasterWhisper, OpenAI TTS, CosyVoice, FishSpeech, and voice agent pipeline design."
 ---
 
 Voice interfaces are becoming a primary way users interact with AI — from real-time assistants to hands-free tools to accessibility applications. Building them well requires mastering two complementary components: **Automatic Speech Recognition (ASR)** to turn user audio into text your LLM can process, and **Text-to-Speech (TTS)** to turn your LLM's response back into natural audio. This page covers both, with a focus on latency-sensitive production deployments.
@@ -12,20 +12,20 @@ ASR is the front door of any voice pipeline. The model you choose determines tra
 
 ### Model Options
 
-<CardGroup cols={2}>
-  <Card title="OpenAI Whisper" icon="globe">
+<AccordionGroup>
+  <Accordion title="OpenAI Whisper" icon="globe">
     The industry-standard open-source ASR model. Supports **99 languages**, multiple model sizes (tiny → large-v3), and produces highly accurate transcriptions including punctuation. The baseline against which most other models are benchmarked.
-  </Card>
-  <Card title="FasterWhisper" icon="bolt">
+  </Accordion>
+  <Accordion title="FasterWhisper" icon="bolt">
     A reimplementation of Whisper using **CTranslate2**, achieving the same accuracy at roughly **4× the speed** with lower memory usage. The go-to choice for production deployments where GPU time matters.
-  </Card>
-  <Card title="Whisper.cpp" icon="microchip">
+  </Accordion>
+  <Accordion title="Whisper.cpp" icon="microchip">
     A C/C++ port of Whisper optimized for **CPU inference**. Runs on edge devices, Raspberry Pi, and local laptops without a GPU. Ideal for offline or privacy-sensitive deployments.
-  </Card>
-  <Card title="OpenAI Whisper API" icon="cloud">
+  </Accordion>
+  <Accordion title="OpenAI Whisper API" icon="cloud">
     The managed API version. No infrastructure to maintain, charges per minute of audio. Best for low-to-medium volume use cases or rapid prototyping before committing to self-hosted infrastructure.
-  </Card>
-</CardGroup>
+  </Accordion>
+</AccordionGroup>
 
 ### FasterWhisper — Self-Hosted Transcription
 
@@ -80,20 +80,20 @@ TTS is the last mile of your voice pipeline — it determines how natural your A
 
 ### Model Options
 
-<CardGroup cols={2}>
-  <Card title="OpenAI TTS API" icon="cloud">
+<AccordionGroup>
+  <Accordion title="OpenAI TTS API" icon="cloud">
     Six voices (alloy, echo, fable, onyx, nova, shimmer), consistent quality, supports streaming PCM output for real-time playback. Best default choice for most production applications.
-  </Card>
-  <Card title="CosyVoice" icon="code">
+  </Accordion>
+  <Accordion title="CosyVoice" icon="code">
     Open-source TTS from Alibaba DAMO Academy. Supports **voice cloning** with a short reference clip, multilingual (Chinese, English, Japanese, Cantonese), and fine-tunable for custom voices.
-  </Card>
-  <Card title="FishSpeech" icon="fish">
+  </Accordion>
+  <Accordion title="FishSpeech" icon="fish">
     Open-source, extremely fast inference — one of the quickest open-source TTS models available. Supports voice cloning and produces natural-sounding output with minimal latency.
-  </Card>
-  <Card title="ElevenLabs" icon="wand-magic-sparkles">
+  </Accordion>
+  <Accordion title="ElevenLabs" icon="wand-magic-sparkles">
     Premium managed TTS with the most natural-sounding voices on the market. Supports voice cloning, emotion control, and multilingual synthesis. Higher latency and cost than OpenAI TTS — best for content generation rather than real-time agents.
-  </Card>
-</CardGroup>
+  </Accordion>
+</AccordionGroup>
 
 ### OpenAI TTS — Standard File Output
 
@@ -276,20 +276,20 @@ A production voice agent connects all of these components into a low-latency loo
 
 Hitting sub-500ms end-to-end latency is achievable but requires deliberate attention to every stage of the pipeline.
 
-<CardGroup cols={2}>
-  <Card title="Sentence-Level TTS" icon="scissors">
+<AccordionGroup>
+  <Accordion title="Sentence-Level TTS" icon="scissors">
     Start speaking each sentence as it's generated rather than waiting for the full LLM response. This alone cuts perceived latency by 1–3 seconds for medium-length responses.
-  </Card>
-  <Card title="Pre-Warm Models" icon="fire">
+  </Accordion>
+  <Accordion title="Pre-Warm Models" icon="fire">
     Keep ASR and TTS models loaded in memory between turns. Cold-loading Whisper large-v3 takes 2–4 seconds — unacceptable mid-conversation. Use a persistent process or model server.
-  </Card>
-  <Card title="Right-Size Your Models" icon="sliders">
+  </Accordion>
+  <Accordion title="Right-Size Your Models" icon="sliders">
     Use `whisper-base.en` or `whisper-small.en` for real-time streaming where 200ms ASR latency is required. Reserve `large-v3` for async transcription tasks where accuracy matters more than speed.
-  </Card>
-  <Card title="Overlap Stages" icon="layer-group">
+  </Accordion>
+  <Accordion title="Overlap Stages" icon="layer-group">
     Start streaming the LLM response before TTS is initialized. Use async/await or threads to run VAD, ASR, and LLM calls concurrently wherever dependencies allow.
-  </Card>
-</CardGroup>
+  </Accordion>
+</AccordionGroup>
 
 ### Target Latency Budget
 

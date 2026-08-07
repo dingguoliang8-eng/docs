@@ -44,22 +44,22 @@ Every project here was shaped by the same set of principles I've arrived at thro
 These projects share a common technology foundation. I chose each tool deliberately and have used it in production long enough to understand its tradeoffs.
 
 <CardGroup cols={2}>
-  <Card title="Backend" icon="server">
+  <Card title="Backend" icon="server" href="#backend">
     **Python + FastAPI** for all API surfaces. FastAPI's async support, automatic OpenAPI docs, and Pydantic integration make it the right choice for LLM-heavy backends where you're dealing with streaming responses and complex request validation.
   </Card>
-  <Card title="Orchestration" icon="sitemap">
+  <Card title="Orchestration" icon="sitemap" href="#orchestration">
     **LangChain + LangGraph** for agent and pipeline orchestration. LangChain for composable building blocks; LangGraph for stateful, cyclical agent workflows with checkpointing and interrupt support.
   </Card>
-  <Card title="Vector Storage" icon="magnifying-glass">
+  <Card title="Vector Storage" icon="magnifying-glass" href="#vector-storage">
     **Qdrant** for vector search. Supports dense, sparse, and hybrid collections natively. The filtering API is expressive enough to support per-tenant data isolation without hacks.
   </Card>
-  <Card title="Inference" icon="microchip">
+  <Card title="Inference" icon="microchip" href="#inference">
     **OpenAI GPT-4o / GPT-4o-mini** for hosted inference and **Llama 3 / Qwen 2.5** via **vLLM** for self-hosted deployments requiring data sovereignty or cost control at scale.
   </Card>
-  <Card title="Caching & Queuing" icon="bolt">
+  <Card title="Caching & Queuing" icon="bolt" href="#caching-queuing">
     **Redis** for session caching, rate limit counters, and as the Celery message broker for background document indexing jobs. Fast, simple, and operationally well-understood.
   </Card>
-  <Card title="Structured Data" icon="table">
+  <Card title="Structured Data" icon="table" href="#structured-data">
     **PostgreSQL** for all relational data: users, tenants, usage records, conversation history, and LangGraph checkpoints in production. JSONB columns handle semi-structured agent state without a separate document store.
   </Card>
 </CardGroup>

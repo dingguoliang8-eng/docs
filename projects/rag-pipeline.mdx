@@ -4,22 +4,22 @@ sidebarTitle: "RAG Pipeline"
 description: "A production RAG pipeline with hybrid retrieval, cross-encoder reranking, and automated evaluation serving enterprise document Q&A at scale."
 ---
 
-This project is a production document Q&A system I built for an enterprise client with 500K+ internal documents — reliability and answer quality were non-negotiable. The client's employees needed accurate answers with source citations, and a hallucinated answer from an internal knowledge base is worse than no answer at all. That constraint drove every architectural decision.
+This project is a production document Q&A system I built for an enterprise client with 500K+ documents — reliability and answer quality were non-negotiable. The client's employees needed accurate answers with source citations, and a hallucinated answer from a knowledge base is worse than no answer at all. That constraint drove every architectural decision.
 
 ## Problem Statement
 
 <CardGroup cols={2}>
-  <Card title="Scale" icon="layer-group">
-    **500K+ internal documents** spanning PDFs, Word files, Markdown, and HTML — accumulated over a decade of operations across multiple business units.
+  <Card title="Scale" icon="layer-group" href="#problem-statement">
+    **500K+ documents** spanning PDFs, Word files, Markdown, and HTML — accumulated over a decade of operations across multiple business units.
   </Card>
-  <Card title="Quality Bar" icon="bullseye">
+  <Card title="Quality Bar" icon="bullseye" href="#problem-statement">
     Users needed **accurate answers with cited sources**. Hallucination was a critical failure mode that would destroy trust in the system within days of launch.
   </Card>
-  <Card title="Multilingual" icon="language">
+  <Card title="Multilingual" icon="language" href="#problem-statement">
     Documents and queries arrive in both **Chinese and English** — sometimes mixed within the same document. The embedding model had to handle both languages natively.
   </Card>
-  <Card title="Latency" icon="gauge">
-    End-to-end query latency target: **under 5 seconds** for 95th percentile queries. Users had been patient with slow internal search tools; they wouldn't be patient with a slow AI assistant.
+  <Card title="Latency" icon="gauge" href="#problem-statement">
+    End-to-end query latency target: **under 5 seconds** for 95th percentile queries. Users had been patient with slow search tools; they wouldn't be patient with a slow AI assistant.
   </Card>
 </CardGroup>
 
@@ -73,10 +73,10 @@ Query
 I evaluated several embedding models before settling on BGE-M3. The key differentiators were multilingual coverage and the ability to generate dense and sparse vectors from a single model pass.
 
 <CardGroup cols={2}>
-  <Card title="Single Model, Three Vector Types" icon="cubes">
+  <Card title="Single Model, Three Vector Types" icon="cubes" href="#why-bge-m3-for-embeddings">
     BGE-M3 produces dense embeddings, sparse lexical weights, and ColBERT multi-vector representations in one forward pass. I use dense + sparse for production and skip ColBERT to keep storage costs reasonable.
   </Card>
-  <Card title="Strong Multilingual Performance" icon="earth-asia">
+  <Card title="Strong Multilingual Performance" icon="earth-asia" href="#why-bge-m3-for-embeddings">
     BGE-M3 is trained on 100+ languages with particular strength in Chinese and English — exactly the language pair this client needed. No separate models, no translation step.
   </Card>
 </CardGroup>
@@ -124,8 +124,7 @@ client.create_collection(
 
 ```python Hybrid Query
 from qdrant_client.models import (
-    NamedVector, NamedSparseVector, SparseVector,
-    SearchRequest, FusionQuery, Prefetch, Fusion
+    SparseVector, Prefetch, Fusion
 )
 
 results = client.query_points(
@@ -145,7 +144,7 @@ results = client.query_points(
             limit=20
         )
     ],
-    query=FusionQuery(fusion=Fusion.RRF),  # Reciprocal Rank Fusion
+    query=Fusion.RRF,  # Reciprocal Rank Fusion
     limit=20
 )
 ```
@@ -160,8 +159,8 @@ from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 
 rewrite_prompt = ChatPromptTemplate.from_messages([
-    ("system", """You are a query optimization assistant. Rewrite the user's question 
-to maximize retrieval recall from a document search index. 
+    ("system", """You are a query optimization assistant. Rewrite the user's question \
+to maximize retrieval recall from a document search index. \
 - Expand abbreviations and acronyms
 - Add relevant synonyms and related terms
 - If the query is in Chinese, keep it in Chinese
@@ -185,20 +184,22 @@ I built the evaluation framework before writing a single line of retrieval code.
     I worked with the client's domain experts to create **200 question-answer pairs** from representative documents. Each pair includes the question, the expected answer, and the source document IDs that should be retrieved.
   </Step>
   <Step title="Define Metrics">
-    Four metrics tracked for every pipeline configuration: **Hit Rate@5** (is the right document in the top 5?), **MRR** (how highly ranked is the best result?), **Faithfulness** (does the answer stay grounded in retrieved context?), and **Answer Relevance** (does the answer address the question?).
+    Four metrics tracked for every pipeline configuration: **Hit Rate@5** (is the right document in the top 5?), **MRR** (how highly ranked is the best result?), **Faithfulness** (does the answer stay grounded in retrieved context?), and **Answer Relevance** (does the answer address the question?)
   </Step>
   <Step title="Automate with RAGAs">
     RAGAs provides LLM-as-judge scoring for Faithfulness and Answer Relevance, automated against the eval dataset on a weekly schedule. Retrieval metrics (Hit Rate, MRR) are computed deterministically from the labeled source document IDs.
   </Step>
   <Step title="Weekly Regression Runs">
-    A GitHub Actions workflow runs the full eval suite every Monday. If any metric drops more than 2 percentage points from the previous week's baseline, the run fails and I get alerted before any user notices degradation.
+    A CI workflow runs the full eval suite every Monday. If any metric drops more than 2 percentage points from the previous week's baseline, the run fails and I get alerted before any user notices degradation.
   </Step>
 </Steps>
 
 ### Evaluation Results
 
+The numbers below are from the evaluation dataset of 200 labeled question-answer pairs. They represent measured performance on that dataset, not a universal benchmark.
+
 | Metric | Naive RAG | With Reranking | With Query Rewrite |
-|--------|-----------|----------------|--------------------|
+|--------|-----------|----------------|---------------------|
 | Hit Rate@5 | 71% | 84% | **89%** |
 | MRR | 0.61 | 0.77 | **0.82** |
 | Faithfulness | 0.73 | 0.81 | **0.85** |
