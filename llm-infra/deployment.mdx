@@ -1,5 +1,5 @@
 ---
-title: "Deploy Open-Source LLMs with vLLM and Ollama"
+title: "Self-Hosting LLMs: vLLM and Ollama Deployment Guide"
 sidebarTitle: "Deployment"
 description: "Serve open-source LLMs in production using vLLM for high-throughput GPU inference and Ollama for local development. Includes OpenAI-compatible API setup."
 ---
@@ -70,13 +70,13 @@ Self-hosting LLMs gives you control over costs, data privacy, and model customiz
 Quantization reduces model weight precision to fit larger models into available GPU VRAM, with varying degrees of quality trade-off.
 
 <CardGroup cols={3}>
-  <Card title="AWQ" icon="circle-check">
+  <Card title="AWQ" icon="circle-check" href="https://huggingface.co/docs/transformers/quantization/awq">
     **Activation-aware Weight Quantization.** 4-bit quantization with minimal quality degradation. The best default choice for production — use `--quantization awq` with an AWQ-quantized model checkpoint.
   </Card>
-  <Card title="GPTQ" icon="circle-half-stroke">
+  <Card title="GPTQ" icon="circle-half-stroke" href="https://huggingface.co/docs/transformers/quantization/gptq">
     **Post-training quantization** to 4-bit or 8-bit. Slightly higher quality loss than AWQ but widely available for most open-source models. Use `--quantization gptq`.
   </Card>
-  <Card title="BitsAndBytes" icon="circle-xmark">
+  <Card title="BitsAndBytes" icon="circle-xmark" href="https://huggingface.co/docs/transformers/quantization/bitsandbytes">
     **Dynamic quantization** — quantizes weights at load time. Slowest inference of the three but requires no pre-quantized checkpoint. Best for experimentation, not production throughput.
   </Card>
 </CardGroup>
@@ -144,6 +144,78 @@ ollama run my-engineer
 
 ---
 
+## LiteLLM: Unified Multi-Provider Proxy
+
+When you're running both managed APIs and self-hosted vLLM endpoints, [LiteLLM](https://github.com/BerriAI/litellm) acts as a unified proxy layer that abstracts them all behind one OpenAI-compatible API. It adds provider failover, load balancing, and cost tracking with minimal configuration.
+
+### Deploy as a Proxy Server
+
+```yaml title="litellm_config.yaml"
+model_list:
+  - model_name: gpt-4o
+    litellm_params:
+      model: openai/gpt-4o
+      api_key: os.environ/OPENAI_API_KEY
+
+  - model_name: claude-sonnet
+    litellm_params:
+      model: anthropic/claude-3-5-sonnet-20241022
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: qwen-local
+    litellm_params:
+      model: openai/Qwen/Qwen2.5-7B-Instruct
+      api_base: http://localhost:8000/v1
+      api_key: not-needed
+
+router_settings:
+  routing_strategy: least-busy
+  num_retries: 3
+  fallbacks:
+    - gpt-4o:
+        - claude-sonnet
+        - qwen-local
+```
+
+```bash title="Start LiteLLM Proxy"
+pip install 'litellm[proxy]'
+litellm --config litellm_config.yaml --port 4000
+```
+
+Your application points at `http://localhost:4000` and uses standard OpenAI client code — the proxy handles provider selection, retries, and usage tracking transparently.
+
+```python title="Route Requests Through LiteLLM Proxy"
+from openai import OpenAI
+
+# All requests go through the LiteLLM proxy
+client = OpenAI(
+    base_url="http://localhost:4000",
+    api_key="your-litellm-master-key",
+)
+
+response = client.chat.completions.create(
+    model="gpt-4o",   # Resolved by LiteLLM router
+    messages=[{"role": "user", "content": "Explain PagedAttention."}],
+)
+print(response.choices[0].message.content)
+```
+
+### LiteLLM vs Direct Client Calls
+
+| Concern | Direct Client | LiteLLM Proxy |
+|---|---|---|
+| Provider failover | Manual | Automatic |
+| Cost tracking | Per-provider dashboard | Unified |
+| Load balancing across replicas | Custom code | Built-in |
+| A/B testing models | Custom code | Config-driven |
+| Rate limit handling | Manual retry logic | Automatic |
+
+<Note>
+  LiteLLM is especially valuable in multi-tenant SaaS products where you want to route different tenant plans to different models (free tier → `gpt-4o-mini`, enterprise → `gpt-4o`) while keeping application code unchanged. See the [SaaS Architecture](/llm-infra/saas-architecture) page for tenant-aware routing patterns.
+</Note>
+
+---
+
 ## LLM Observability
 
 Running LLMs in production without observability is flying blind. You need visibility into what prompts are being sent, what responses come back, how long things take, and how much it costs.
@@ -187,7 +259,7 @@ Once tracing is enabled, every LangChain invocation appears in your LangSmith da
     The KV (key-value) cache stores attention state for tokens already processed, enabling efficient autoregressive generation. It lives in GPU VRAM alongside model weights.
 
     Before deploying, estimate your KV cache memory requirement:
-    ```
+    ```text title="KV Cache Formula"
     KV cache size ≈ 2 × num_layers × num_heads × head_dim × max_seq_len × batch_size × dtype_bytes
     ```
     If your model weights use 20GB of VRAM and your GPU has 24GB total, you have only 4GB for KV cache — which constrains your max sequence length and concurrent request capacity. Plan this before you hit OOM errors in production.

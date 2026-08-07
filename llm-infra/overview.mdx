@@ -11,7 +11,7 @@ LLM infrastructure decisions have a massive impact on cost, latency, and quality
 Choosing between a managed API and self-hosted inference is the first architectural fork in any LLM system. Neither is universally better — the right answer depends on your constraints.
 
 <CardGroup cols={2}>
-  <Card title="Managed APIs" icon="cloud">
+  <Card title="Managed APIs" icon="cloud" href="https://platform.openai.com/docs">
     **Providers:** OpenAI, Anthropic, Google Vertex AI
 
     - Fastest path to production — no infra to manage
@@ -19,7 +19,7 @@ Choosing between a managed API and self-hosted inference is the first architectu
     - Scales automatically with demand
     - **Trade-offs:** Data leaves your infrastructure, expensive at high volume, limited customization, subject to provider rate limits
   </Card>
-  <Card title="Self-Hosted Inference" icon="server">
+  <Card title="Self-Hosted Inference" icon="server" href="/llm-infra/deployment">
     **Tools:** vLLM, Ollama, Text Generation Inference (TGI)
 
     - Full control over data — stays in your VPC or on-prem
@@ -79,10 +79,10 @@ Open-source models are self-hostable and can be fine-tuned on your domain data. 
 ### Specialized Models
 
 <CardGroup cols={2}>
-  <Card title="Code Generation" icon="code">
+  <Card title="Code Generation" icon="code" href="https://huggingface.co/deepseek-ai/DeepSeek-Coder-V2-Instruct">
     **DeepSeek Coder V2** and **Qwen2.5-Coder** outperform general-purpose models on code completion, debugging, and test generation — at a fraction of the cost of GPT-4o for coding tasks.
   </Card>
-  <Card title="Reasoning" icon="brain">
+  <Card title="Reasoning" icon="brain" href="https://huggingface.co/Qwen/QwQ-32B-Preview">
     **QwQ-32B** and **o1-mini** excel at multi-step reasoning, math, and logic problems where chain-of-thought processing matters more than raw generation speed.
   </Card>
 </CardGroup>
@@ -163,6 +163,85 @@ Every token in your prompt costs money. Strategies to reduce prompt size:
 ### Use Streaming
 
 Streaming doesn't reduce your token cost, but it dramatically improves perceived latency — the first token appears almost immediately rather than waiting for the full response. For user-facing applications, streaming is almost always worth implementing.
+
+---
+
+## Multi-Provider Routing with LiteLLM
+
+[LiteLLM](https://github.com/BerriAI/litellm) provides a unified OpenAI-compatible interface over 100+ LLM providers. Instead of maintaining separate client code for OpenAI, Anthropic, Gemini, and your self-hosted vLLM endpoints, LiteLLM normalizes them all behind a single API — and adds routing, fallback, and load-balancing logic on top.
+
+### Why LiteLLM Matters
+
+- **Provider portability** — swap providers by changing a model string, not your application code
+- **Automatic fallbacks** — if your primary provider hits a rate limit or goes down, LiteLLM retries against a backup model automatically
+- **Cost tracking** — unified spend tracking across all providers in one dashboard
+- **Load balancing** — distribute traffic across multiple deployments of the same model (useful for high-throughput self-hosted setups)
+
+### YAML Router Configuration
+
+```yaml title="litellm_config.yaml"
+model_list:
+  # Primary: frontier model for complex tasks
+  - model_name: gpt-4o
+    litellm_params:
+      model: openai/gpt-4o
+      api_key: os.environ/OPENAI_API_KEY
+
+  # Fallback: mid-tier model for cost savings
+  - model_name: gpt-4o-mini
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_key: os.environ/OPENAI_API_KEY
+
+  # Anthropic alternative
+  - model_name: claude-sonnet
+    litellm_params:
+      model: anthropic/claude-3-5-sonnet-20241022
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  # Self-hosted vLLM endpoint
+  - model_name: qwen-local
+    litellm_params:
+      model: openai/Qwen/Qwen2.5-7B-Instruct
+      api_base: http://localhost:8000/v1
+      api_key: not-needed
+
+router_settings:
+  routing_strategy: least-busy
+  num_retries: 3
+  fallbacks:
+    - gpt-4o:
+        - claude-sonnet
+        - gpt-4o-mini
+```
+
+### Start the LiteLLM Proxy
+
+```bash title="Run LiteLLM Proxy Server"
+pip install litellm[proxy]
+litellm --config litellm_config.yaml --port 4000
+```
+
+Once running, point any OpenAI-compatible client at `http://localhost:4000` — the proxy handles provider selection, retries, and usage logging transparently.
+
+```python title="Call LiteLLM Proxy with OpenAI Client"
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://localhost:4000",
+    api_key="your-litellm-master-key",
+)
+
+response = client.chat.completions.create(
+    model="gpt-4o",          # Routes to best available provider
+    messages=[{"role": "user", "content": "Summarize this document."}],
+)
+print(response.choices[0].message.content)
+```
+
+<Tip>
+  LiteLLM's fallback configuration is one of the most practical reliability improvements you can add to an LLM product. A primary → fallback chain like `gpt-4o → claude-3-5-sonnet → gpt-4o-mini` gives you resilience against provider outages with no changes to application code.
+</Tip>
 
 ---
 

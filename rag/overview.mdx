@@ -14,14 +14,14 @@ RAG operates in two distinct phases: **indexing** (a one-time or periodic offlin
   <Step title="Indexing Phase">
     Raw documents are loaded, split into chunks, converted into vector embeddings, and stored in a vector database alongside their metadata.
 
-    ```
+    ```text
     Documents → Chunker → Embedding Model → Vector Store
     ```
   </Step>
   <Step title="Query Phase">
     The user's query is embedded with the same model, used to retrieve the most relevant chunks, optionally reranked for precision, and then passed — with the original question — to the LLM to synthesize a grounded answer.
 
-    ```
+    ```text
     Query → Embedding Model → Retriever → Reranker → LLM → Answer
     ```
   </Step>
@@ -29,26 +29,14 @@ RAG operates in two distinct phases: **indexing** (a one-time or periodic offlin
 
 Putting both phases together, the full data flow looks like this:
 
-```
-                        ┌─────────────────────────────────────┐
-  INDEXING              │                                     │
-  ─────────             │  Document                           │
-  Raw Docs              │     └─► Chunker                     │
-     └─► Chunker        │            └─► Embedding Model      │
-            └─► Embed   │                     └─► Vector Store│
-                  └─► Store                                   │
-                        └─────────────────────────────────────┘
+```text
+  INDEXING
+  ─────────
+  Raw Docs → Chunker → Embedding Model → Vector Store
 
-                        ┌─────────────────────────────────────┐
-  QUERYING              │                                     │
-  ────────              │  User Query                         │
-  User Query            │     └─► Embedding Model             │
-     └─► Embed          │            └─► Retriever            │
-            └─► Retrieve│                  └─► Reranker       │
-                   └─► Rerank                    └─► LLM      │
-                          └─► LLM                     └─► Answer
-                                └─► Answer            │       │
-                        └─────────────────────────────────────┘
+  QUERYING
+  ────────
+  User Query → Embedding Model → Retriever → Reranker → LLM → Answer
 ```
 
 <Note>
@@ -61,25 +49,38 @@ The following example wires together OpenAI embeddings, a Qdrant vector store, a
 
 ```python title="basic_rag.py"
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
-from langchain_community.vectorstores import Qdrant
-from langchain.chains import RetrievalQA
+from langchain_qdrant import QdrantVectorStore
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import RunnablePassthrough
 
 # Indexing
 embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
-vectorstore = Qdrant.from_documents(
+vectorstore = QdrantVectorStore.from_documents(
     documents=docs,
     embedding=embeddings,
     url="http://localhost:6333",
     collection_name="knowledge_base"
 )
 
-# Retrieval + Generation
+# Retrieval + Generation (LCEL chain)
+retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
 llm = ChatOpenAI(model="gpt-4o")
-qa_chain = RetrievalQA.from_chain_type(
-    llm=llm,
-    retriever=vectorstore.as_retriever(search_kwargs={"k": 5})
+
+prompt = ChatPromptTemplate.from_template(
+    "Answer the question using only the context below.\n\nContext:\n{context}\n\nQuestion: {question}"
 )
-result = qa_chain.invoke({"query": "What is our return policy?"})
+
+def format_docs(docs):
+    return "\n\n".join(doc.page_content for doc in docs)
+
+rag_chain = (
+    {"context": retriever | format_docs, "question": RunnablePassthrough()}
+    | prompt
+    | llm
+    | StrOutputParser()
+)
+result = rag_chain.invoke("What is our return policy?")
 ```
 
 ## When to Use RAG
@@ -87,16 +88,16 @@ result = qa_chain.invoke({"query": "What is our return policy?"})
 RAG is the right choice whenever your application needs to answer questions grounded in a specific corpus of knowledge — especially when that corpus changes over time.
 
 <CardGroup cols={2}>
-  <Card title="Knowledge Bases" icon="book-open">
+  <Card title="Knowledge Bases" icon="book-open" href="/rag/retrieval-reranking">
     Internal wikis, policy documents, and SOPs that employees need to query in natural language without reading hundreds of pages.
   </Card>
-  <Card title="Document Q&A" icon="file-magnifying-glass">
+  <Card title="Document Q&A" icon="file-magnifying-glass" href="/rag/advanced-patterns">
     Legal contracts, research papers, technical manuals — let users ask questions and get answers with direct citations.
   </Card>
-  <Card title="Customer Support" icon="headset">
+  <Card title="Customer Support" icon="headset" href="/rag/retrieval-reranking">
     Ground your support chatbot in your product documentation and ticket history to reduce hallucinated responses.
   </Card>
-  <Card title="Enterprise Search" icon="magnifying-glass">
+  <Card title="Enterprise Search" icon="magnifying-glass" href="/rag/embeddings">
     Replace keyword search across heterogeneous data sources with a unified semantic search and generation layer.
   </Card>
 </CardGroup>

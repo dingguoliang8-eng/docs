@@ -1,7 +1,7 @@
 ---
-title: "Multimodal AI: Building Systems Beyond Text"
+title: "Multimodal AI Systems: Architecture and Engineering Patterns"
 sidebarTitle: "Overview"
-description: "Introduction to multimodal AI engineering: combining speech, vision, and language models into unified pipelines for voice agents and document understanding."
+description: "Multimodal AI engineering: combining speech, vision, and language models into unified pipelines for voice agents and document understanding."
 ---
 
 Modern AI applications increasingly combine multiple modalities — text, speech, vision, and structured data — into unified systems. Rather than a single model answering text queries, production-grade AI now orchestrates pipelines where audio is transcribed, images are parsed, and language models reason over all of it together. This page gives you a map of the multimodal landscape and the engineering patterns that tie it together.
@@ -11,16 +11,16 @@ Modern AI applications increasingly combine multiple modalities — text, speech
 Each modality brings its own tooling, latency profile, and failure modes. Understanding what lives in each bucket helps you pick the right architecture before you write a line of code.
 
 <CardGroup cols={2}>
-  <Card title="Text" icon="file-lines">
+  <Card title="Text" icon="file-lines" href="/llm-infra/overview">
     The foundation. Large language models (LLMs) process and generate text — covered in depth elsewhere in this portfolio. Text is the lingua franca that most multimodal pipelines ultimately route through.
   </Card>
-  <Card title="Speech" icon="microphone">
+  <Card title="Speech" icon="microphone" href="/multimodal/asr-tts">
     **ASR (Automatic Speech Recognition)** converts audio to text. **TTS (Text-to-Speech)** converts text back to audio. **Speaker diarization** attributes speech segments to individual speakers — essential for meeting transcription and multi-party voice agents.
   </Card>
-  <Card title="Vision" icon="eye">
+  <Card title="Vision" icon="eye" href="/multimodal/vision-language">
     Vision models handle **image understanding** (captioning, VQA, classification), **document parsing** (OCR, table extraction, form understanding), and **video analysis** (frame-level reasoning, temporal understanding).
   </Card>
-  <Card title="Combined" icon="layer-group">
+  <Card title="Combined Pipelines" icon="layer-group" href="/agents/overview">
     Combining modalities unlocks new application classes: **voice agents** (ASR → LLM → TTS), **multimodal chatbots** (text + image input), and **document Q&A with images** (PDFs containing charts, diagrams, and mixed layouts).
   </Card>
 </CardGroup>
@@ -33,7 +33,7 @@ Three dominant patterns emerge when you need to wire multiple modalities togethe
   <Accordion title="1. Sequential Pipeline" icon="arrow-right">
     Each modality is processed in order, with the output of one stage becoming the input of the next. A classic voice agent looks like:
 
-    ```
+    ```text
     Audio Input → ASR → Text → LLM → Text → TTS → Audio Output
     ```
 
@@ -47,7 +47,7 @@ Three dominant patterns emerge when you need to wire multiple modalities togethe
   <Accordion title="2. Unified Model" icon="cube">
     A single model natively handles multiple input modalities. Models like **GPT-4o** and **Gemini 1.5** accept text, images, and audio in a single API call and reason over all of them jointly.
 
-    ```
+    ```text
     Text + Image + Audio → Unified Model → Text / Audio Output
     ```
 
@@ -61,7 +61,7 @@ Three dominant patterns emerge when you need to wire multiple modalities togethe
   <Accordion title="3. Modality Router" icon="code-branch">
     An upstream classifier detects the input modality and routes it to a specialized model optimized for that type.
 
-    ```
+    ```text
     Input → Classifier → [ASR Model | Vision Model | Text LLM] → Output
     ```
 
@@ -89,18 +89,18 @@ Three dominant patterns emerge when you need to wire multiple modalities togethe
 
 Not every multimodal workload has the same timing requirements. Choosing the right processing model upfront avoids costly rewrites later.
 
-<CardGroup cols={2}>
-  <Card title="Real-Time (Streaming)" icon="bolt">
+<AccordionGroup>
+  <Accordion title="Real-Time (Streaming)" icon="bolt">
     Voice agents and live transcription require **streaming pipelines** where audio is processed as it arrives. Key techniques: chunked audio capture, streaming ASR with partial transcripts, sentence-level TTS so speech starts before the LLM finishes generating.
 
     Target: end-to-end latency **under 500ms** for a natural conversational feel.
-  </Card>
-  <Card title="Batch Processing" icon="database">
+  </Accordion>
+  <Accordion title="Batch Processing" icon="database">
     Document understanding, invoice parsing, and video analysis can run asynchronously. You get to use larger, more accurate models (Whisper large-v3, GPT-4o with high-detail vision) without worrying about real-time latency budgets.
 
     Target: correctness and cost efficiency over speed.
-  </Card>
-</CardGroup>
+  </Accordion>
+</AccordionGroup>
 
 ## Explore the Multimodal Stack
 

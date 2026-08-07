@@ -143,7 +143,7 @@ response = client.chat.completions.create(
 ```python agents/tools/retrieval_tools.py
 from langchain_core.tools import tool
 from langchain_community.tools.tavily_search import TavilySearchResults
-from langchain_community.vectorstores import Chroma
+from langchain_chroma import Chroma  # langchain-chroma replaces langchain_community.vectorstores.Chroma
 from langchain_openai import OpenAIEmbeddings
 
 # Web search
@@ -153,11 +153,14 @@ def search_web(query: str) -> str:
     return TavilySearchResults(max_results=5).invoke(query)
 
 # Vector store lookup (semantic search over your documents)
-vectorstore = Chroma(embedding_function=OpenAIEmbeddings())
+vectorstore = Chroma(
+    collection_name="knowledge_base",
+    embedding_function=OpenAIEmbeddings(),
+)
 
 @tool
 def search_knowledge_base(query: str) -> str:
-    """Search the internal knowledge base for relevant documents."""
+    """Search the knowledge base for relevant documents."""
     docs = vectorstore.similarity_search(query, k=4)
     return "\n\n---\n\n".join([d.page_content for d in docs])
 

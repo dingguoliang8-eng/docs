@@ -48,9 +48,8 @@ Hybrid search runs both dense and sparse retrieval in parallel, then merges the 
 ```python title="hybrid_retrieval.py"
 from langchain.retrievers import EnsembleRetriever
 from langchain_community.retrievers import BM25Retriever
-from langchain_community.vectorstores import Qdrant
 
-# Dense retriever
+# Dense retriever (assumes vectorstore is already initialised)
 dense_retriever = vectorstore.as_retriever(search_kwargs={"k": 20})
 
 # Sparse retriever
@@ -145,16 +144,16 @@ Tune `lambda_mult` based on your use case:
 You cannot improve what you do not measure. Instrument your retrieval pipeline before optimizing it.
 
 <CardGroup cols={2}>
-  <Card title="Hit Rate / Recall@K" icon="crosshairs">
+  <Card title="Hit Rate / Recall@K" icon="crosshairs" href="https://docs.ragas.io/en/latest/concepts/metrics/available_metrics/context_recall/">
     Did the correct document appear anywhere in the top K results? The most fundamental metric — start here.
   </Card>
-  <Card title="MRR (Mean Reciprocal Rank)" icon="arrow-up-1-9">
+  <Card title="MRR (Mean Reciprocal Rank)" icon="arrow-up-1-9" href="https://en.wikipedia.org/wiki/Mean_reciprocal_rank">
     Average of 1/rank for the first correct result. Penalizes systems that find the right answer but bury it at rank 5 vs rank 1.
   </Card>
-  <Card title="NDCG" icon="chart-line">
+  <Card title="NDCG" icon="chart-line" href="https://en.wikipedia.org/wiki/Discounted_cumulative_gain">
     Normalized Discounted Cumulative Gain. Accounts for graded relevance (highly relevant vs. somewhat relevant) and rank position.
   </Card>
-  <Card title="Context Precision / Recall" icon="ruler">
+  <Card title="Context Precision / Recall" icon="ruler" href="https://docs.ragas.io/en/latest/concepts/metrics/available_metrics/context_precision/">
     Of the chunks retrieved, what fraction are actually relevant? Of all relevant chunks, what fraction did you retrieve? Both matter.
   </Card>
 </CardGroup>

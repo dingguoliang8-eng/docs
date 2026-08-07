@@ -9,13 +9,13 @@ This project is a B2B AI SaaS product I built allowing companies to deploy brand
 ## Product Overview
 
 <CardGroup cols={3}>
-  <Card title="Starter Plan" icon="seedling">
+  <Card title="Starter Plan" icon="seedling" href="#product-overview">
     **GPT-4o-mini** inference, 100K tokens/month, up to 500 documents indexed. Designed for small teams evaluating the product.
   </Card>
-  <Card title="Pro Plan" icon="star">
+  <Card title="Pro Plan" icon="star" href="#product-overview">
     **GPT-4o** inference, 1M tokens/month, up to 10K documents indexed. For teams running the assistant as a core workflow tool.
   </Card>
-  <Card title="Enterprise Plan" icon="building">
+  <Card title="Enterprise Plan" icon="building" href="#product-overview">
     **Dedicated vLLM inference** (Qwen 2.5-72B or Llama 3.3-70B), unlimited tokens, unlimited documents, custom deployment options.
   </Card>
 </CardGroup>
@@ -23,7 +23,7 @@ This project is a B2B AI SaaS product I built allowing companies to deploy brand
 Each tenant gets a fully isolated environment: their own knowledge base, their own system prompt, their own usage quota, and a branded chat interface at `{tenant_slug}.app.example.com`. Tenant data never mixes — not in the database, not in the vector store, not in the cache.
 
 <Info>
-  The platform currently serves **200+ tenants**, ranging from 1-person startups to enterprise teams with 5000+ users. The multi-tenant architecture has scaled horizontally without significant rearchitecting since launch.
+  At the time of writing, the platform serves approximately **200+ tenants**, ranging from 1-person startups to enterprise teams with thousands of users. The multi-tenant architecture has scaled horizontally without significant rearchitecting since launch.
 </Info>
 
 ## Technical Architecture
@@ -143,13 +143,13 @@ async def stream_chat(
 
 <Steps>
   <Step title="Upload">
-    The client uploads a document via `POST /documents`. The API validates file type and size against the tenant's plan quota, generates a signed URL for direct upload to MinIO (S3-compatible object storage), and returns the URL. The client uploads directly to MinIO — the API server never handles the raw file bytes.
+    The client uploads a document via `POST /documents`. The API validates file type and size against the tenant's plan quota, generates a signed URL for direct upload to object storage (MinIO/S3-compatible), and returns the URL. The client uploads directly to object storage — the API server never handles the raw file bytes.
   </Step>
   <Step title="Task Queuing">
-    When MinIO receives the upload, a webhook fires `POST /internal/document-ready` with the object key. The API enqueues a Celery task with the document metadata and returns immediately.
+    When object storage receives the upload, a webhook fires and the API enqueues a Celery task with the document metadata, then returns immediately.
   </Step>
   <Step title="Processing">
-    The Celery worker fetches the file from MinIO, parses it with Unstructured.io, chunks with `RecursiveCharacterTextSplitter`, embeds with BGE-M3, and upserts to the tenant's Qdrant collection. The document record in PostgreSQL is updated with `status=indexed` and chunk count.
+    The Celery worker fetches the file from object storage, parses it with Unstructured.io, chunks with `RecursiveCharacterTextSplitter`, embeds with BGE-M3, and upserts to the tenant's Qdrant collection. The document record in PostgreSQL is updated with `status=indexed` and chunk count.
   </Step>
   <Step title="Notification">
     On completion (or failure), the worker sends a WebSocket message to any connected clients for that tenant. The frontend updates the document status in real time without polling.
@@ -183,18 +183,20 @@ def index_document(self, document_id: str, tenant_id: str):
 
 ## Key Metrics and Results
 
+The numbers below reflect representative measurements taken in production over a six-month period.
+
 <CardGroup cols={2}>
-  <Card title="Tenants Onboarded" icon="users">
-    **200+ tenants** across industries including legal, HR, customer support, and technical documentation.
+  <Card title="Tenants Onboarded" icon="users" href="#key-metrics-and-results">
+    Around **200+ tenants** across industries including legal, HR, customer support, and technical documentation.
   </Card>
-  <Card title="First-Token Latency" icon="gauge-high">
-    **P95: 320ms** to first streaming token. Measured end-to-end from request receipt to first SSE event at the client.
+  <Card title="First-Token Latency" icon="gauge-high" href="#key-metrics-and-results">
+    Approximately **320ms P95** to first streaming token, measured end-to-end from request receipt to first SSE event at the client.
   </Card>
-  <Card title="Indexing Throughput" icon="file-arrow-up">
-    **~1,000 pages/minute** sustained indexing throughput with 4 Celery workers, BGE-M3 on a single A10G GPU.
+  <Card title="Indexing Throughput" icon="file-arrow-up" href="#key-metrics-and-results">
+    Approximately **1,000 pages/minute** sustained indexing throughput with 4 Celery workers and BGE-M3 on a single A10G GPU.
   </Card>
-  <Card title="Uptime" icon="circle-check">
-    **99.2% uptime** over 6 months. The two incidents were both infrastructure-level (PostgreSQL storage exhaustion and a Qdrant OOM) — not application bugs.
+  <Card title="Uptime" icon="circle-check" href="#key-metrics-and-results">
+    Around **99.2% uptime** over the first 6 months. Both incidents were infrastructure-level (PostgreSQL storage exhaustion and a Qdrant OOM) — not application bugs.
   </Card>
 </CardGroup>
 

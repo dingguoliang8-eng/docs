@@ -1,5 +1,5 @@
 ---
-title: "Lessons Learned Building Production AI Systems"
+title: "Hard-Won Lessons From Building Production AI Systems"
 sidebarTitle: "Lessons Learned"
 description: "Hard-won lessons from building and shipping AI agent systems, RAG pipelines, and LLM SaaS products. What worked, what failed, and what I'd do differently."
 ---
@@ -68,16 +68,16 @@ In long-running agents and multi-turn conversations, the message history grows c
 There are three practical strategies, and the right choice depends on your use case:
 
 <CardGroup cols={3}>
-  <Card title="Message Summarization" icon="file-lines">
+  <Card title="Message Summarization" icon="file-lines" href="#lesson-3-context-window-management-is-non-trivial">
     Periodically summarize early messages in the conversation into a compact
     summary, then replace them. Preserves semantic meaning while reducing
     tokens. Best for long-running conversations.
   </Card>
-  <Card title="Sliding Window" icon="window-restore">
+  <Card title="Sliding Window" icon="window-restore" href="#lesson-3-context-window-management-is-non-trivial">
     Keep only the last N messages. Simple to implement, but loses context from
     earlier in the conversation. Works well when recency matters most.
   </Card>
-  <Card title="Structured Memory" icon="database">
+  <Card title="Structured Memory" icon="database" href="#lesson-3-context-window-management-is-non-trivial">
     Extract key facts from the conversation into a separate memory store (a
     vector DB or key-value store). The agent retrieves relevant memories on
     demand. Most powerful, most complex.
@@ -199,31 +199,33 @@ Without traces, you're guessing. With traces, you can see exactly which tool cal
 
 ## What I'd Do Differently
 
-<Accordion title="Build evals on day one, not week six">
-  Every project I've shipped would have moved faster if I'd built even a small
-  evaluation dataset before writing the first line of agent code. Evals aren't
-  overhead — they're the feedback loop that makes everything else faster. Start
-  with 20 examples. Grow from there. Never ship without them.
-</Accordion>
+<AccordionGroup>
+  <Accordion title="Build evals on day one, not week six">
+    Every project I've shipped would have moved faster if I'd built even a small
+    evaluation dataset before writing the first line of agent code. Evals aren't
+    overhead — they're the feedback loop that makes everything else faster. Start
+    with 20 examples. Grow from there. Never ship without them.
+  </Accordion>
 
-<Accordion title="Use LangGraph from the start for anything agent-shaped">
-  I built two production agents with vanilla LangChain before switching to
-  LangGraph. The migration was painful. LangGraph's explicit state management,
-  checkpointing, and conditional edges solve problems that you *will* encounter
-  in production, and retrofitting them is harder than starting with them.
-</Accordion>
+  <Accordion title="Use LangGraph from the start for anything agent-shaped">
+    I built two production agents with vanilla LangChain before switching to
+    LangGraph. The migration was painful. LangGraph's explicit state management,
+    checkpointing, and conditional edges solve problems that you *will* encounter
+    in production, and retrofitting them is harder than starting with them.
+  </Accordion>
 
-<Accordion title="Treat prompts as versioned artifacts">
-  Early on I edited system prompts in place and lost track of what changed and
-  when. Prompts should live in version control, have named versions, and changes
-  should be tied to eval results. LangSmith's prompt hub or even a simple YAML
-  file in your repo is infinitely better than editing strings in code.
-</Accordion>
+  <Accordion title="Treat prompts as versioned artifacts">
+    Early on I edited system prompts in place and lost track of what changed and
+    when. Prompts should live in version control, have named versions, and changes
+    should be tied to eval results. LangSmith's prompt hub or even a simple YAML
+    file in your repo is infinitely better than editing strings in code.
+  </Accordion>
 
-<Accordion title="Design for graceful degradation from the beginning">
-  LLMs fail, APIs go down, rate limits get hit. I didn't build fallback paths
-  early enough and paid for it in incident response. Every AI feature should
-  have a defined behavior for when the model is unavailable — whether that's a
-  cached response, a simpler fallback model, or a clear error message to the
-  user.
-</Accordion>
+  <Accordion title="Design for graceful degradation from the beginning">
+    LLMs fail, APIs go down, rate limits get hit. I didn't build fallback paths
+    early enough and paid for it in incident response. Every AI feature should
+    have a defined behavior for when the model is unavailable — whether that's a
+    cached response, a simpler fallback model, or a clear error message to the
+    user.
+  </Accordion>
+</AccordionGroup>

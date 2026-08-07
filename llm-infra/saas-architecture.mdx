@@ -17,17 +17,17 @@ Building an AI SaaS product requires solving multi-tenancy at every layer — fr
 There are three broad models for multi-tenant infrastructure, each representing a different point on the cost/isolation trade-off curve:
 
 <CardGroup cols={3}>
-  <Card title="Shared Infrastructure" icon="share-nodes">
+  <Card title="Shared Infrastructure" icon="share-nodes" href="/llm-infra/saas-architecture#isolation-models">
     All tenants share compute, databases, and vector stores. Tenant data is separated by metadata filters and access control in application code.
 
     **Best for:** Early-stage products, cost-sensitive deployments, non-regulated industries
   </Card>
-  <Card title="Hybrid" icon="code-branch">
+  <Card title="Hybrid" icon="code-branch" href="/llm-infra/saas-architecture#isolation-models">
     Shared compute and APIs, but per-tenant data stores (separate vector collections, separate database schemas or rows partitioned by tenant ID).
 
     **Best for:** Most production SaaS products — good balance of isolation and operational simplicity
   </Card>
-  <Card title="Siloed (Dedicated)" icon="lock">
+  <Card title="Siloed (Dedicated)" icon="lock" href="/llm-infra/saas-architecture#isolation-models">
     Each tenant gets their own infrastructure: dedicated compute, isolated databases, separate deployments.
 
     **Best for:** Enterprise contracts, regulated industries (healthcare, finance), highest-security requirements
@@ -49,10 +49,13 @@ Every request in your system needs a verified tenant identity attached before it
 
 <CodeGroup>
   ```python title="JWT Claim Extraction"
+  import os
   import jwt
 
+  JWT_SECRET = os.environ["JWT_SECRET_KEY"]  # Load from environment — never hardcode
+
   def extract_tenant_from_jwt(token: str) -> str:
-      payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+      payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
       tenant_id = payload.get("tenant_id")
       if not tenant_id:
           raise ValueError("Token missing tenant_id claim")

@@ -10,6 +10,7 @@ Building with LLMs introduces a class of bugs that don't exist in deterministic 
 
 ## The Gotcha Catalog
 
+<AccordionGroup>
 <Accordion title="Gotcha 1: Prompt Injection">
 
 **The problem:** User input contains instructions that override or subvert your system prompt. The model treats user-supplied text as authoritative instructions rather than data to be processed.
@@ -321,3 +322,4 @@ clean_checkpoint = state_history[-3]  # or find by metadata
 - **Scratchpad vs conversation history** — separate the agent's internal reasoning from the user-visible conversation so errors in reasoning don't pollute the visible context
 
 </Accordion>
+</AccordionGroup>
