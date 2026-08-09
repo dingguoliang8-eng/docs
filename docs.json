@@ -73,6 +73,8 @@
               {
                 "group": "工程笔记",
                 "pages": [
+                  "notes/config-control-plane",
+                  "notes/voice-session-interrupt",
                   "notes/lessons-learned",
                   "notes/llm-gotchas",
                   "notes/performance-tips"
