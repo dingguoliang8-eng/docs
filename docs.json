@@ -1,7 +1,7 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "theme": "luma",
-  "name": "AI Engineering Portfolio",
+  "name": "Ding Guoliang · AI Engineering",
   "colors": {
     "primary": "#ef7025",
     "light": "#eec9bc",
@@ -20,8 +20,8 @@
               {
                 "group": "简介",
                 "pages": [
-                  "introduction",
-                  "about"
+                  "about",
+                  "introduction"
                 ]
               },
               {
@@ -66,10 +66,8 @@
               {
                 "group": "项目",
                 "pages": [
-                  "projects/overview",
-                  "projects/ai-agent-platform",
-                  "projects/rag-pipeline",
-                  "projects/llm-saas"
+                  "projects/voice-agent-platform",
+                  "projects/overview"
                 ]
               },
               {
@@ -93,8 +91,8 @@
               {
                 "group": "Introduction",
                 "pages": [
-                  "en/introduction",
-                  "en/about"
+                  "en/about",
+                  "en/introduction"
                 ]
               },
               {
@@ -139,10 +137,8 @@
               {
                 "group": "Projects",
                 "pages": [
-                  "en/projects/overview",
-                  "en/projects/rag-pipeline",
-                  "en/projects/ai-agent-platform",
-                  "en/projects/llm-saas"
+                  "en/projects/voice-agent-platform",
+                  "en/projects/overview"
                 ]
               },
               {
@@ -286,6 +282,37 @@
       "source": "/zh/about",
       "destination": "/about",
       "permanent": true
+    },
+    {
+      "source": "/projects/ai-agent-platform",
+      "destination": "/projects/voice-agent-platform",
+      "permanent": true
+    },
+    {
+      "source": "/en/projects/llm-saas",
+      "destination": "/en/projects/overview",
+      "permanent": true
+    },
+    {
+      "source": "/projects/rag-pipeline",
+      "destination": "/projects/overview",
+      "permanent": true
+    },
+    {
+      "source": "/projects/llm-saas",
+      "destination": "/projects/overview",
+      "permanent": true
+    },
+    {
+      "source": "/en/projects/ai-agent-platform",
+      "destination": "/en/projects/voice-agent-platform",
+      "permanent": true
+    },
+    {
+      "source": "/en/projects/rag-pipeline",
+      "destination": "/en/projects/overview",
+      "permanent": true
     }
-  ]
+  ],
+  "description": "Ding Guoliang — AI Application Engineer. Production voice-agent platforms, RAG, multimodal pipelines, and engineering notes."
 }

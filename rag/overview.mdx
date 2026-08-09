@@ -3,6 +3,7 @@ title: "RAG 工程：构建可靠的检索增强系统"
 sidebarTitle: "概览"
 description: "检索增强生成端到端指南：索引流水线、检索策略、重排与 grounded 生成。"
 ---
+
 检索增强生成（RAG）在推理时把外部知识喂给大语言模型。模型不再只靠训练时记住的内容，而是从你自己的数据里取回相关文档当上下文——幻觉更少、能做领域问答，答案也能落到可核对的材料上。
 
 ## RAG 流水线怎么走
@@ -128,6 +129,10 @@ RAG 与微调都能让基座 LLM 适配你的需求，但解决的是不同问�
 ## 探索完整 RAG 栈
 
 <CardGroup cols={2}>
+  <Card title="代表项目" icon="microchip" href="/projects/voice-agent-platform">
+    端侧语音 Agent 智控平台中的知识库与向量检索实践（脱敏）。
+  </Card>
+
   <Card title="Embeddings" icon="vector-square" href="/rag/embeddings">
     选型与优化嵌入模型。对比 OpenAI、Cohere、BGE、E5。掌握分块策略与向量库配置。
   </Card>
@@ -138,9 +143,5 @@ RAG 与微调都能让基座 LLM 适配你的需求，但解决的是不同问�
 
   <Card title="进阶模式" icon="diagram-project" href="/rag/advanced-patterns">
     HyDE、父子检索、Self-RAG、Corrective RAG 与多向量索引等生产模式。
-  </Card>
-
-  <Card title="AI Agents" icon="robot" href="/agents/overview">
-    把 RAG 与工具调用 Agent 结合，构建能跨多步检索、推理与行动的系统。
   </Card>
 </CardGroup>

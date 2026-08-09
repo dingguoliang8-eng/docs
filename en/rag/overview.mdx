@@ -3,6 +3,7 @@ title: "RAG Engineering: Build Reliable Retrieval-Augmented Systems"
 sidebarTitle: "Overview"
 description: "End-to-end guide to Retrieval-Augmented Generation: indexing pipeline, retrieval strategies, reranking, and generation with grounding."
 ---
+
 Retrieval-Augmented Generation (RAG) augments large language models with external knowledge retrieved at inference time. Instead of relying solely on what a model learned during training, RAG fetches relevant documents from your own data sources and supplies them as context — dramatically reducing hallucination, enabling domain-specific answers, and keeping responses grounded in verifiable content.
 
 ## The RAG Pipeline
@@ -90,12 +91,15 @@ RAG is the right choice whenever your application needs to answer questions grou
   <Card title="Knowledge Bases" icon="book-open" href="/en/rag/retrieval-reranking">
     Internal wikis, policy documents, and SOPs that employees need to query in natural language without reading hundreds of pages.
   </Card>
+
   <Card title="Document Q&A" icon="file-magnifying-glass" href="/en/rag/advanced-patterns">
     Legal contracts, research papers, technical manuals — let users ask questions and get answers with direct citations.
   </Card>
+
   <Card title="Customer Support" icon="headset" href="/en/rag/retrieval-reranking">
     Ground your support chatbot in your product documentation and ticket history to reduce hallucinated responses.
   </Card>
+
   <Card title="Enterprise Search" icon="magnifying-glass" href="/en/rag/embeddings">
     Replace keyword search across heterogeneous data sources with a unified semantic search and generation layer.
   </Card>
@@ -106,7 +110,7 @@ RAG is the right choice whenever your application needs to answer questions grou
 Both RAG and fine-tuning adapt a base LLM to your needs, but they solve different problems. Choosing the wrong approach is one of the most common mistakes in AI engineering.
 
 | Dimension | RAG | Fine-tuning |
-|---|---|---|
+| --- | --- | --- |
 | **Knowledge updates** | ✅ Update the index, no retraining | ❌ Requires a new training run |
 | **Grounding / citations** | ✅ Sources are explicit and auditable | ❌ Knowledge is implicit in weights |
 | **Data volume needed** | ✅ Works with any corpus size | ❌ Needs high-quality labeled examples |
@@ -126,16 +130,19 @@ Both RAG and fine-tuning adapt a base LLM to your needs, but they solve differen
 ## Explore the Full RAG Stack
 
 <CardGroup cols={2}>
+  <Card title="Flagship project" icon="microchip" href="/en/projects/voice-agent-platform">
+    Knowledge base and vector retrieval in an edge voice-agent control platform (desensitized).
+  </Card>
+
   <Card title="Embeddings" icon="vector-square" href="/en/rag/embeddings">
     Select and optimize embedding models. Compare OpenAI, Cohere, BGE, and E5. Master chunking strategies and vector store setup.
   </Card>
+
   <Card title="Retrieval & Reranking" icon="filter" href="/en/rag/retrieval-reranking">
     Implement hybrid search, MMR diversity, and cross-encoder reranking to maximize retrieval precision.
   </Card>
+
   <Card title="Advanced Patterns" icon="diagram-project" href="/en/rag/advanced-patterns">
     HyDE, parent-child retrieval, Self-RAG, corrective RAG, and multi-vector indexing for production systems.
-  </Card>
-  <Card title="AI Agents" icon="robot" href="/en/agents/overview">
-    Combine RAG with tool-calling agents to build systems that can retrieve, reason, and act across multiple steps.
   </Card>
 </CardGroup>
