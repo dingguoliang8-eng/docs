@@ -1,74 +1,57 @@
 ---
-title: "项目：生产环境中的应用型 AI 工程"
+title: "项目：端侧语音 Agent 与工程笔记"
 sidebarTitle: "概览"
-description: "应用型 AI 工程项目概览：Agent 平台、RAG 流水线与 LLM SaaS。"
+description: "项目区入口：脱敏代表项目与真实技术栈。"
 ---
-这里记的是我真正做过、上过线的系统。每个都对应具体问题，也留下了后来怎么做 AI 工程的习惯。不是玩具 Demo：有真实用户，也出过逼我认真对待可靠性、可观测性和架构的故障。
 
-## 项目列表
+本区记录**可对外讲述的落地案例**与工程笔记。头牌是脱敏后的端侧语音 Agent 智控平台；主题深潜（Agents / RAG / 多模态 / 基础设施）在「作品集」Tab。
+
+---
+
+## 代表项目
+
+<Card title="端侧语音 Agent 智控平台" icon="microchip" href="/projects/voice-agent-platform">
+  管理台 \+ 业务/配置 API \+ 设备侧语音服务的闭环。近半年主线，功能基本闭环并进入上线。
+</Card>
+
+---
+
+## 技术栈（与代表项目一致）
 
 <CardGroup cols={2}>
-  <Card title="AI Agent 平台" icon="robot" href="/projects/ai-agent-platform">
-    基于 LangGraph 的多智能体编排平台，支持自主任务执行与人机协同工作流。
+  <Card title="智控台前端" icon="desktop">
+    **Vue** 管理台，多环境 API，权限相关交互。
   </Card>
 
-  <Card title="RAG 流水线" icon="database" href="/projects/rag-pipeline">
-    带混合检索、重排与评估的生产级 RAG 系统，服务于规模化企业文档问答。
+  <Card title="智控台后端" icon="server">
+    **Java / Spring Boot**，MySQL，Redis；设备、智能体、模型、知识库、团队权限。
   </Card>
 
-  <Card title="LLM SaaS" icon="cloud" href="/projects/llm-saas">
-    多租户 AI SaaS 产品：按租户 RAG、模型路由、用量追踪与流式聊天。
+  <Card title="设备侧服务" icon="microchip">
+    **Python / asyncio**，WebSocket 会话；VAD→ASR→LLM→TTS 或端到端语音。
+  </Card>
+
+  <Card title="检索与多模态" icon="database">
+    向量检索（如 **Qdrant**）、Embedding 服务；ASR/TTS、视觉相关能力。
   </Card>
 </CardGroup>
 
-## 这些项目背后的工程原则
+抽象模式与原理仍在知识库章节，不在此重复虚构「独立三件套产品」。
 
-这里的每个项目都由同一组原则塑造——它们来自反复试错，不是教条，而是可靠减少凌晨事故的模式。
+---
 
-<AccordionGroup>
-  <Accordion title="可观测性优先：先埋点再优化" icon="chart-line">
-    在能量化之前，我不碰性能。对 LLM 系统，这意味着用 LangSmith 追踪每条 chain 与 Agent 调用，在每步捕获 Token 数与延迟，并在写优化代码前先建仪表盘。优化黑盒是猜测。
-  </Accordion>
-
-  <Accordion title="评估驱动：上线前先建评估集" icon="flask">
-    我吃过亏：没有 ground-truth 评估集就上线 RAG 改进，等于瞎飞。现在我会在写任何检索或生成逻辑前，先建标注评估集——问答对、期望工具调用、黄金输出。测不了就不发。
-  </Accordion>
-
-  <Accordion title="优雅降级：每次 AI 调用都可能失败；为此设计" icon="shield-halved">
-    LLM API 会返回 429、超时，偶尔返回畸形 JSON。我构建的每个集成都有显式重试、回退模型与优雅错误响应。失败的 LLM 调用绝不该拖垮应用——应返回合理错误信息并记录失败供复盘。
-  </Accordion>
-
-  <Accordion title="可组合架构：小而可测的组件，而非巨型 chain" icon="cubes">
-    400 行的 LangChain chain 不可测。我把流水线拆成最小有意义单元——retriever、reranker、提示格式化器、响应解析器——各自单元测试。组合发生在图层面（LangGraph），数据流显式可检视。
-  </Accordion>
-</AccordionGroup>
-
-## 技术栈
-
-这些项目共享同一技术底座。每个工具都是有意选择，并在生产中用到足以理解其权衡。
+## 工程笔记
 
 <CardGroup cols={2}>
-  <Card title="后端" icon="server">
-    **Python \+ FastAPI** 用于所有 API 面。FastAPI 的异步支持、自动 OpenAPI 文档与 Pydantic 集成，使其成为 LLM 密集后端的合适选择——你要处理流式响应与复杂请求校验。
+  <Card title="经验总结" icon="lightbulb" href="/notes/lessons-learned">
+    配置双模式、会话延迟、权限分层等上线教训。
   </Card>
 
-  <Card title="编排" icon="sitemap">
-    **LangChain \+ LangGraph** 用于 Agent 与流水线编排。LangChain 提供可组合积木；LangGraph 提供带 checkpoint 与中断支持的有状态、可循环 Agent 工作流。
+  <Card title="LLM 常见坑" icon="triangle-exclamation" href="/notes/llm-gotchas">
+    提示注入、幻觉、上下文与限流等。
   </Card>
 
-  <Card title="向量存储" icon="magnifying-glass">
-    **Qdrant** 做向量检索。原生支持 dense、sparse 与混合集合。过滤 API 足够表达按租户数据隔离，无需歪招。
-  </Card>
-
-  <Card title="推理" icon="microchip">
-    **OpenAI GPT-4o / GPT-4o-mini** 做托管推理；需要数据主权或规模化控本时，经 **vLLM** 跑 **Llama 3 / Qwen 2.5** 自托管。
-  </Card>
-
-  <Card title="缓存与队列" icon="bolt">
-    **Redis** 用于会话缓存、限流计数，并作为后台文档索引进程的 Celery 消息代理。快、简单、运维上为人熟知。
-  </Card>
-
-  <Card title="结构化数据" icon="table">
-    **PostgreSQL** 存所有关系数据：用户、租户、用量记录、对话历史，以及生产中的 LangGraph checkpoint。JSONB 列承载半结构化 Agent 状态，无需单独文档库。
+  <Card title="性能技巧" icon="gauge-high" href="/notes/performance-tips">
+    延迟与吞吐相关实践。
   </Card>
 </CardGroup>

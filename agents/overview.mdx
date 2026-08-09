@@ -3,6 +3,7 @@ title: "AI Agent 架构：设计模式与原则"
 sidebarTitle: "概览"
 description: "构建可靠 AI Agent 的核心概念与设计模式：规划、记忆、工具使用与多智能体编排。"
 ---
+
 AI Agent 靠大模型驱动，在 **感知 → 规划 → 行动** 的循环里干活。它不是答完一轮就停，而是根据用户输入、工具结果和记忆决定下一步，调用工具或委派子 Agent，改状态，再继续——直到达成目标或触发终止条件。静态「提示—回答」做不到这种能力。
 
 ## Agent 由什么组成？
@@ -126,6 +127,10 @@ Agent 先生成**完整计划**（编号步骤列表），再按序执行每一�
 ## 继续探索
 
 <CardGroup cols={2}>
+  <Card title="代表项目" icon="microchip" href="/projects/voice-agent-platform">
+    端侧语音 Agent 智控平台（脱敏案例）。
+  </Card>
+
   <Card title="LangGraph" icon="diagram-project" href="/agents/langgraph">
     用 LangGraph 的 StateGraph、节点与条件边路由构建有状态、可循环的 Agent 工作流。
   </Card>
@@ -136,9 +141,5 @@ Agent 先生成**完整计划**（编号步骤列表），再按序执行每一�
 
   <Card title="工具使用" icon="wrench" href="/agents/tool-use">
     用正确的 Schema、错误处理与并行工具执行实现可靠的 Function Calling。
-  </Card>
-
-  <Card title="LangChain 文档" icon="book" href="https://python.langchain.com/docs/concepts/agents/">
-    LangChain 关于 Agent 概念与原语的官方文档。
   </Card>
 </CardGroup>

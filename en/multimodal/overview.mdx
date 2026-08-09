@@ -3,6 +3,7 @@ title: "Multimodal AI Systems: Architecture and Engineering Patterns"
 sidebarTitle: "Overview"
 description: "Multimodal AI engineering: combining speech, vision, and language models into unified pipelines for voice agents and document understanding."
 ---
+
 Modern AI applications increasingly combine multiple modalities — text, speech, vision, and structured data — into unified systems. Rather than a single model answering text queries, production-grade AI now orchestrates pipelines where audio is transcribed, images are parsed, and language models reason over all of it together. This page gives you a map of the multimodal landscape and the engineering patterns that tie it together.
 
 ## Modality Overview
@@ -13,14 +14,17 @@ Each modality brings its own tooling, latency profile, and failure modes. Unders
   <Card title="Text" icon="file-lines" href="/en/llm-infra/overview">
     The foundation. Large language models (LLMs) process and generate text — covered in depth elsewhere in this portfolio. Text is the lingua franca that most multimodal pipelines ultimately route through.
   </Card>
+
   <Card title="Speech" icon="microphone" href="/en/multimodal/asr-tts">
     **ASR (Automatic Speech Recognition)** converts audio to text. **TTS (Text-to-Speech)** converts text back to audio. **Speaker diarization** attributes speech segments to individual speakers — essential for meeting transcription and multi-party voice agents.
   </Card>
+
   <Card title="Vision" icon="eye" href="/en/multimodal/vision-language">
     Vision models handle **image understanding** (captioning, VQA, classification), **document parsing** (OCR, table extraction, form understanding), and **video analysis** (frame-level reasoning, temporal understanding).
   </Card>
+
   <Card title="Combined Pipelines" icon="layer-group" href="/en/agents/overview">
-    Combining modalities unlocks new application classes: **voice agents** (ASR → LLM → TTS), **multimodal chatbots** (text + image input), and **document Q&A with images** (PDFs containing charts, diagrams, and mixed layouts).
+    Combining modalities unlocks new application classes: **voice agents** (ASR → LLM → TTS), **multimodal chatbots** (text \+ image input), and **document Q&A with images** (PDFs containing charts, diagrams, and mixed layouts).
   </Card>
 </CardGroup>
 
@@ -94,6 +98,7 @@ Not every multimodal workload has the same timing requirements. Choosing the rig
 
     Target: end-to-end latency **under 500ms** for a natural conversational feel.
   </Accordion>
+
   <Accordion title="Batch Processing" icon="database">
     Document understanding, invoice parsing, and video analysis can run asynchronously. You get to use larger, more accurate models (Whisper large-v3, GPT-4o with high-detail vision) without worrying about real-time latency budgets.
 
@@ -104,16 +109,19 @@ Not every multimodal workload has the same timing requirements. Choosing the rig
 ## Explore the Multimodal Stack
 
 <CardGroup cols={2}>
+  <Card title="Flagship project" icon="microchip" href="/en/projects/voice-agent-platform">
+    VAD→ASR→LLM→TTS / S2S edge voice-agent loop (desensitized).
+  </Card>
+
   <Card title="ASR & TTS" icon="waveform-lines" href="/en/multimodal/asr-tts">
     Build voice-enabled applications with Whisper, FasterWhisper, and streaming TTS pipelines.
   </Card>
+
   <Card title="Vision & Language" icon="image" href="/en/multimodal/vision-language">
     Document understanding, image Q&A, and multimodal RAG with GPT-4o Vision and open-source VLMs.
   </Card>
+
   <Card title="AI Agents" icon="robot" href="/en/agents/overview">
     Orchestrate multimodal capabilities inside autonomous agent loops with tool use and memory.
-  </Card>
-  <Card title="RAG Pipelines" icon="magnifying-glass" href="/en/rag/overview">
-    Extend retrieval-augmented generation to handle image-heavy documents and mixed-media corpora.
   </Card>
 </CardGroup>

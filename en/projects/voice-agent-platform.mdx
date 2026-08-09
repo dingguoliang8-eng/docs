@@ -1,0 +1,142 @@
+---
+title: "Edge Voice-Agent Control Platform"
+sidebarTitle: "Voice Agent Platform"
+description: "Desensitized case study: edge voice-agent control platform architecture, design choices, and launch trade-offs."
+---
+
+Desensitized flagship case study: an **edge voice-agent control platform** I helped build over the past half year and more. The goal was a shippable loop — operate in the cloud, run real-time voice agents on the edge — not three disconnected demos.
+
+> No company names, product brands, customers, or internal details. Architecture roles and engineering trade-offs only.
+
+---
+
+## Problem and goals
+
+Edge voice needs low latency and stable sessions; the cloud must manage devices, agents, models, knowledge bases, and team permissions. Without a shared contract you get:
+
+- Config that cannot be delivered per device
+- Assistants stuck in single-turn Q&A without tools or retrieval
+- Fuzzy tenancy boundaries that block SaaS-style operations
+
+We needed a **control plane \+ session plane** platform: operate in the console, run speech on the device service, with a clear deployable contract.
+
+---
+
+## System overview
+
+```text
+Admin console (Vue)
+    ↕ HTTP
+Control-plane API (Java / Spring)
+  · devices / agents / models / knowledge
+  · team permissions and auth
+  · per-device config delivery
+    ↕ config pull / management API
+On-device speech service (Python)
+  · WebSocket sessions (one device, one connection)
+  · VAD → ASR → LLM → TTS (or end-to-end speech)
+  · tool calling / MCP / plugins
+  · OTA, vision, and related HTTP APIs
+```
+
+<CardGroup cols={3}>
+  <Card title="Control UI" icon="desktop">
+    Console for devices, agents, models, knowledge, and permissions.
+  </Card>
+
+  <Card title="Control API" icon="server">
+    Business/config backend: auth, team isolation, delivery contracts.
+  </Card>
+
+  <Card title="Session plane" icon="waveform-lines">
+    Real-time speech and tool orchestration driven by config.
+  </Card>
+</CardGroup>
+
+---
+
+## What I helped build
+
+Framed as **contributed to** (not sole ownership of the full stack):
+
+- **Console and API**: device/agent/model/knowledge domains, team permissions and auth, config-delivery contracts to the device service
+- **On-device speech service**: session path and message routing, ASR/TTS (and end-to-end speech) integration, tool/plugin/MCP dispatch, dual-mode config with the control plane
+- **Admin web**: management UI, multi-environment API wiring, permission-aware interactions
+- **Retrieval**: knowledge/vector search (including image-vector scenarios) into the platform
+
+Deeper themes: [Agents](/en/agents/overview), [RAG](/en/rag/overview), [Multimodal](/en/multimodal/overview), [Infrastructure](/en/llm-infra/overview).
+
+---
+
+## Key design choices
+
+### Dual-mode configuration
+
+- **Local mode**: defaults \+ local overrides for development
+- **Control-plane mode**: pull per-device config at connect time; secrets stay out of committed defaults
+
+### Real-time session pipeline
+
+Classic path: `audio → VAD → ASR → intent/tools → LLM → TTS → playback`. An end-to-end speech path is optional. Keep the connection core thin; extend via providers, plugins, and message handlers.
+
+### Tools and extensions
+
+Unify server plugins, MCP, and device capabilities behind one dispatcher so "can talk" becomes "can act". Schemas, errors, and timeouts are part of production readiness.
+
+### Knowledge and vectors
+
+Control plane manages knowledge and models; retrieval uses a vector store (e.g. Qdrant) for documents/images before generation. Multi-tenant filtering must be explicit at retrieval time.
+
+### Permission layers
+
+- System permissions (menus/roles)
+- Team/resource permissions (business data isolation)
+
+Every API should declare which layer it belongs to.
+
+---
+
+## Launch-stage trade-offs
+
+With the loop closed and launch underway, priorities tend to be:
+
+1. **Session stability and latency** — speech is sensitive to first token and barge-in; keep streaming and async/thread-pool boundaries clear
+2. **Graceful degradation** — ASR/LLM/TTS failures must not kill the connection
+3. **Config and secret hygiene** — no secrets in committed defaults; contract changes stay bilateral
+4. **Observability** — logs keyed by connection/device, or production becomes restart-only
+
+More in [Lessons Learned](/en/notes/lessons-learned).
+
+---
+
+## Stack (aligned with this case)
+
+| Layer | Tech |
+| --- | --- |
+| Admin web | Vue, componentized console, multi-env APIs |
+| Control API | Java, Spring Boot, MySQL, Redis |
+| Device service | Python, asyncio, WebSocket |
+| Retrieval | Vector DB (e.g. Qdrant), embedding services |
+| Multimodal | ASR / TTS / end-to-end speech, vision HTTP |
+
+---
+
+## Read next
+
+<CardGroup cols={2}>
+  <Card title="Projects overview" icon="folder" href="/en/projects/overview">
+    Projects section entry and stack notes.
+  </Card>
+
+  <Card title="Agents" icon="robot" href="/en/agents/overview">
+    Agent and tool-use deep-dives.
+  </Card>
+
+  <Card title="Multimodal" icon="waveform-lines" href="/en/multimodal/overview">
+    Speech and vision pipelines.
+  </Card>
+
+  <Card title="Lessons learned" icon="lightbulb" href="/en/notes/lessons-learned">
+    Launch-stage pitfalls.
+  </Card>
+</CardGroup>

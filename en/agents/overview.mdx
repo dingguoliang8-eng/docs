@@ -3,6 +3,7 @@ title: "AI Agent Architecture: Design Patterns & Principles"
 sidebarTitle: "Overview"
 description: "Core concepts and design patterns for building reliable AI agents: planning, memory, tool use, and multi-agent orchestration architectures."
 ---
+
 AI agents are LLM-powered systems that operate in a continuous **perception → planning → action** loop. Rather than responding to a single prompt and stopping, an agent perceives its environment (user input, tool results, memory), plans what to do next, executes actions (tool calls, sub-agent delegation, state updates), and repeats — until it reaches a goal or termination condition. This architecture unlocks capabilities that static prompt-response systems simply cannot achieve.
 
 ## What Makes an Agent?
@@ -10,7 +11,7 @@ AI agents are LLM-powered systems that operate in a continuous **perception → 
 Every reliable agent is built from a small set of composable components. Understanding what each one does — and how they interact — is the foundation for designing systems that actually work in production.
 
 | Component | Role |
-|---|---|
+| --- | --- |
 | **LLM Backbone** | The reasoning engine. Decides what to do next based on current context. |
 | **Tools / Functions** | External capabilities the LLM can invoke: web search, code execution, API calls, database lookups. |
 | **Short-Term Memory** | The active context window — messages, tool results, and observations accumulated in the current run. |
@@ -63,7 +64,7 @@ def run_agent(user_input: str, max_steps: int = 10):
 
 No single architecture fits every problem. Here are the three patterns you'll encounter most often, along with when each one earns its complexity.
 
-### 1. ReAct (Reasoning + Acting)
+### 1. ReAct (Reasoning \+ Acting)
 
 ReAct interleaves **thinking** and **acting** in a tight loop. On each step the model produces a `Thought` (internal reasoning), then an `Action` (tool call or final answer), then observes the result before deciding what to do next.
 
@@ -111,7 +112,7 @@ After producing an initial output, the agent invokes a **critic** step — eithe
 Use this as a quick decision guide:
 
 | Scenario | Recommended Pattern |
-|---|---|
+| --- | --- |
 | Open-ended research or Q&A with unpredictable tool use | **ReAct** |
 | Long, structured tasks with known sub-steps (e.g., report generation) | **Plan-and-Execute** |
 | High-stakes outputs where quality matters more than speed | **Reflection** |
@@ -126,16 +127,19 @@ Use this as a quick decision guide:
 ## Explore Further
 
 <CardGroup cols={2}>
+  <Card title="Flagship project" icon="microchip" href="/en/projects/voice-agent-platform">
+    Edge voice-agent control platform (desensitized case).
+  </Card>
+
   <Card title="LangGraph" icon="diagram-project" href="/en/agents/langgraph">
     Build stateful, cyclical agent workflows with LangGraph's StateGraph, nodes, and conditional edge routing.
   </Card>
+
   <Card title="Multi-Agent Systems" icon="network-wired" href="/en/agents/multi-agent">
     Design supervisor, hierarchical, and peer-to-peer multi-agent topologies for complex task decomposition.
   </Card>
+
   <Card title="Tool Use" icon="wrench" href="/en/agents/tool-use">
     Implement reliable function calling with proper schemas, error handling, and parallel tool execution.
-  </Card>
-  <Card title="LangChain Docs" icon="book" href="https://python.langchain.com/docs/concepts/agents/">
-    Official LangChain documentation on agent concepts and primitives.
   </Card>
 </CardGroup>

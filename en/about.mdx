@@ -1,19 +1,20 @@
 ---
-title: "About Me: AI Application Engineer Moving Into Agent Systems"
+title: "About Me"
 sidebarTitle: "About Me"
-description: "AI Application Engineer: path from Java backend toward agent systems and AI Runtime. Focus, experience, and philosophy."
+description: "Ding Guoliang, AI Application Engineer. Edge voice-agent platform and engineering philosophy."
 ---
+
 ## Introduction
 
-I am an AI Application Engineer. My work sits at the intersection of applied AI capabilities and production software systems — building applications that use large language models, retrieval, and agent-style workflows in ways that hold up beyond demos.
+I am **Ding Guoliang**, an **AI Application Engineer**. I work between model capabilities and shippable software — wiring LLMs, retrieval, speech pipelines, and agent-style flows into products that hold up beyond demos.
 
-My current direction is clear: deepen AI application engineering into **Agent System Engineering**, with a longer-term goal of becoming an **AI Runtime Engineer**. This site documents how I think about those systems, what I am building, and what I am still learning.
+Over the past half year and more, I helped build and close the loop on an **edge voice-agent control platform** (admin console \+ configuration/business API \+ on-device speech service). The product is functionally closed and entering production launch. My near-term focus is deepening into **Agent System Engineering**; longer term, **AI Runtime Engineering**.
+
+This site records how I think about these systems, what trade-offs showed up in real work, and what I am still learning.
 
 ---
 
 ## Engineering Journey
-
-My path has been incremental rather than abrupt:
 
 ```text
 Java Backend Development
@@ -22,56 +23,47 @@ Java Backend Development
       → AI Runtime Engineer (long-term goal)
 ```
 
-I started in **Java backend development**, where reliability, authentication, permissions, and system architecture were everyday concerns. That foundation still shapes how I approach AI work: models and frameworks matter, but so do tenancy, access control, and production constraints.
+I started in **Java backend** work — reliability, auth, permissions, and system architecture. That still shapes how I approach AI: models matter, but so do tenancy, access control, and production constraints.
 
-As an **AI Application Engineer**, I have focused on building and evolving AI application platforms — taking existing AI capabilities and turning them into systems that can be deployed, shared, and operated. That includes transforming AI assistants into **SaaS-oriented** products and designing **multi-tenant** architectures around them.
+As an **AI Application Engineer**, I have worked on platform applications, turning assistant capabilities into operable products, and designing **multi-tenant / team permission** models with configuration delivery. On the device side, that means real-time speech sessions: VAD → ASR → LLM → TTS (and end-to-end speech paths), coordinated with tool calling and knowledge retrieval.
 
-Looking ahead, I am moving toward **Agent System Engineering**: systems that plan, use tools, and coordinate multi-step work rather than only answering single prompts. Longer term, I want to go deeper into **AI Runtime** — the execution environments and infrastructure that agent systems run on.
+Next I want to go deeper into **agent systems** that plan, use tools, and run multi-step work — then into **AI Runtime**, the execution environments agents depend on.
 
 ---
 
 ## Technical Focus
 
-My current technical interests fall into a few clear areas:
+### LLM apps and control planes
 
-### LLM applications
-
-- Production-ready LLM applications
-- Grounding model capabilities in application architecture, not only prompts
+- Production LLM / voice-agent applications
+- Admin consoles, permissions, and config delivery — not prompts alone
 
 ### Agents and retrieval
 
-- AI Agent architecture
-- RAG systems
-- Embedding and reranking technologies
+- Agent architecture and tool use (including MCP-style extensions)
+- RAG / knowledge bases and vector search
 
-### Infrastructure and serving
+### Infrastructure and multimodal
 
-- LLM deployment and inference infrastructure
-- AI SaaS architecture and multi-tenant systems
-
-### Multimodal systems
-
-- Multimodal AI systems
-- ASR and TTS pipelines
-- Vision-language applications
+- On-device session services and inference paths
+- ASR / TTS (and end-to-end speech) pipelines
+- Vision-related capabilities in multimodal stacks
 
 <CardGroup cols={2}>
-  <Card title="AI Agents" icon="robot" href="/en/agents/overview">
-    Agent architecture and orchestration patterns.
+  <Card title="Flagship project" icon="microchip" href="/en/projects/voice-agent-platform">
+    Edge voice-agent control platform (desensitized case study).
+  </Card>
 
+  <Card title="AI Agents" icon="robot" href="/en/agents/overview">
+    Agent architecture and tool use.
   </Card>
 
   <Card title="RAG Systems" icon="database" href="/en/rag/overview">
     Retrieval, embeddings, and reranking.
   </Card>
 
-  <Card title="LLM Infrastructure" icon="server" href="/en/llm-infra/overview">
-    Deployment, inference, and SaaS architecture.
-  </Card>
-
   <Card title="Multimodal AI" icon="waveform-lines" href="/en/multimodal/overview">
-    ASR, TTS, and vision-language pipelines.
+    ASR, TTS, and vision-language.
   </Card>
 </CardGroup>
 
@@ -79,43 +71,35 @@ My current technical interests fall into a few clear areas:
 
 ## Engineering Experience
 
-Relevant experience includes:
+Recent closed-loop work includes:
 
-- Developing AI application systems based on existing AI platforms
-- Transforming AI assistants into SaaS-oriented systems
-- Designing multi-tenant architecture
-- Working with authentication, permission, and system architecture
-- Building RAG-related applications
-- Exploring multimodal AI systems, including ASR, TTS, and vision-language applications
+- Helping build the control-plane console and API (devices, agents, models, knowledge bases, team permissions)
+- Helping build the on-device speech session service: real-time pipelines, tool calling, cloud config sync
+- Turning assistant capabilities into operable multi-tenant / team-isolated products
+- Auth, permission, and system architecture work
+- RAG / vector search applications (including image-vector scenarios)
+- Multimodal capabilities: ASR, TTS, vision-related APIs
 
-The through-line is practical: take AI capabilities, embed them in real application platforms, and make the surrounding software engineering — tenancy, auth, and architecture — first-class.
+The through-line: embed AI in real platforms; keep tenancy, auth, and architecture first-class. See [Voice Agent Platform](/en/projects/voice-agent-platform).
 
 ---
 
 ## Engineering Philosophy
 
-Four principles guide how I work:
+**Production over demos.** Prefer systems you can operate, harden, and evolve.
 
-**Production over demos.** I care about systems that can be operated, secured, and evolved — not only prototypes that look good in a notebook.
+**Understand the architecture, not only the framework.** Retrieval, inference, sessions, tenancy, and failure paths need a clear model.
 
-**Understand the architecture, not only the framework.** Frameworks accelerate delivery, but I want a clear model of what sits underneath: retrieval, inference, tenancy, and failure modes.
+**Combine AI with reliable software engineering.** Auth, permissions, multi-tenant design, and system architecture are part of the product.
 
-**Combine AI with reliable software engineering.** Authentication, permissions, multi-tenant design, and system architecture are part of AI product work, not separate from it.
-
-**Document what you learn.** This knowledge base exists so engineering judgment — including trade-offs and open questions — stays written down and revisable.
+**Document what you learn.** This knowledge base keeps judgments, trade-offs, and open questions revisable.
 
 ---
 
-## Current Learning and Exploration
+## Current Learning
 
-I am actively exploring:
+- Agents: from single-turn assistants to multi-step, tool-using workflows
+- Speech-session latency, graceful degradation, and observability
+- RAG, multimodal pipelines, and SaaS-oriented AI platform concerns
 
-- Agent systems and how they move from single-turn assistants to multi-step, tool-using workflows
-- LLM infrastructure for deployment and inference
-- Advanced AI engineering topics across RAG, multimodal pipelines, and SaaS-oriented AI platforms
-
-This portfolio is where that learning becomes structured documentation. It will grow as my work moves further into agent systems and, over time, AI runtime engineering.
-
-<Note>
-  Prefer the language switcher if you want the Chinese version of this page.
-</Note>
+Chinese is the default locale; English is for cross-check and external readers.

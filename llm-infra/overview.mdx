@@ -3,6 +3,7 @@ title: "LLM 基础设施：语言模型服务与扩展"
 sidebarTitle: "概览"
 description: "LLM 基础设施决策概览：托管 API vs 自建推理、模型选型、成本优化与可观测性。"
 ---
+
 基础设施怎么选，会直接卡住成本、延迟和质量。多模型路由、上下文管理、要不要自托管——早期决策往往就是系统上限。
 
 ## 托管 API 还是自托管
@@ -170,6 +171,10 @@ def routed_completion(query: str) -> str:
 ## 继续探索
 
 <CardGroup cols={2}>
+  <Card title="代表项目" icon="microchip" href="/projects/voice-agent-platform">
+    智控台 \+ 设备侧语音 Agent 的生产闭环（脱敏案例）。
+  </Card>
+
   <Card title="部署" icon="rocket" href="/llm-infra/deployment">
     配置生产 GPU 推理用的 vLLM 与本地开发用的 Ollama，以及可观测性与优化建议。
   </Card>
