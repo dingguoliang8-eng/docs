@@ -6,100 +6,53 @@ description: "Ding Guoliang, AI Application Engineer. Edge voice-agent platform 
 
 ## Introduction
 
-I am **Ding Guoliang**, an **AI Application Engineer**. I work between model capabilities and shippable software — wiring LLMs, retrieval, speech pipelines, and agent-style flows into products that hold up beyond demos.
+I am **Ding Guoliang**, an AI Application Engineer. Over the past half year my main line has been an **edge voice-agent control platform**: Vue \+ Java control plane for devices, agents, models, knowledge, and team permissions; Python on-device WebSocket speech sessions — listen, recognize, reason, speak, plus tools and on-demand retrieval. Functionally closed and entering launch.
 
-Over the past half year and more, I helped build and close the loop on an **edge voice-agent control platform** (admin console \+ configuration/business API \+ on-device speech service). The product is functionally closed and entering production launch. My near-term focus is deepening into **Agent System Engineering**; longer term, **AI Runtime Engineering**.
-
-This site records how I think about these systems, what trade-offs showed up in real work, and what I am still learning.
+I cover the full loop and care about systems you can operate, interrupt cleanly, and degrade safely — not demos only. Desensitized write-up: [Voice Agent Platform](/en/projects/voice-agent-platform).
 
 ---
 
-## Engineering Journey
+## Path
 
 ```text
-Java Backend Development
-  → AI Application Engineering
-    → Agent System Engineering
-      → AI Runtime Engineer (long-term goal)
+Java backend
+  → AI application engineering (control plane + voice agent)
+    → Deeper agent-system and runtime questions
 ```
 
-I started in **Java backend** work — reliability, auth, permissions, and system architecture. That still shapes how I approach AI: models matter, but so do tenancy, access control, and production constraints.
-
-As an **AI Application Engineer**, I have worked on platform applications, turning assistant capabilities into operable products, and designing **multi-tenant / team permission** models with configuration delivery. On the device side, that means real-time speech sessions: VAD → ASR → LLM → TTS (and end-to-end speech paths), coordinated with tool calling and knowledge retrieval.
-
-Next I want to go deeper into **agent systems** that plan, use tools, and run multi-step work — then into **AI Runtime**, the execution environments agents depend on.
+Backend habits still apply: auth, permissions, isolation, failure paths matter as much as models. Those constraints show up in dual-mode config, barge-in, and team data scope.
 
 ---
 
-## Technical Focus
+## What I work on
 
-### LLM apps and control planes
-
-- Production LLM / voice-agent applications
-- Admin consoles, permissions, and config delivery — not prompts alone
-
-### Agents and retrieval
-
-- Agent architecture and tool use (including MCP-style extensions)
-- RAG / knowledge bases and vector search
-
-### Infrastructure and multimodal
-
-- On-device session services and inference paths
-- ASR / TTS (and end-to-end speech) pipelines
-- Vision-related capabilities in multimodal stacks
+- Control console and API: devices/agents/models/knowledge, system vs team permissions, config delivery
+- On-device speech service: session path, classic vs end-to-end mutual exclusion, tool dispatch, control-plane sync
+- Frontend: admin UI, permission UX, multi-region business APIs
+- Knowledge: control-plane ops \+ in-session retrieval
 
 <CardGroup cols={2}>
   <Card title="Flagship project" icon="microchip" href="/en/projects/voice-agent-platform">
-    Edge voice-agent control platform (desensitized case study).
+    Day-in-the-life, session walkthrough, depth anchors.
   </Card>
 
-  <Card title="AI Agents" icon="robot" href="/en/agents/overview">
-    Agent architecture and tool use.
+  <Card title="Lessons learned" icon="lightbulb" href="/en/notes/lessons-learned">
+    Short retros.
   </Card>
 
-  <Card title="RAG Systems" icon="database" href="/en/rag/overview">
-    Retrieval, embeddings, and reranking.
+  <Card title="Projects overview" icon="folder" href="/en/projects/overview">
+    Stack and notes entry.
   </Card>
 
-  <Card title="Multimodal AI" icon="waveform-lines" href="/en/multimodal/overview">
-    ASR, TTS, and vision-language.
+  <Card title="Introduction" icon="house" href="/en/introduction">
+    Site entry.
   </Card>
 </CardGroup>
 
 ---
 
-## Engineering Experience
+## How I think
 
-Recent closed-loop work includes:
+Production constraints first: felt latency, failure shape, observability. Frameworks can change; control↔session contracts, permission boundaries, and interrupt semantics should not be vague. I write judgments here so they can be revised.
 
-- Helping build the control-plane console and API (devices, agents, models, knowledge bases, team permissions)
-- Helping build the on-device speech session service: real-time pipelines, tool calling, cloud config sync
-- Turning assistant capabilities into operable multi-tenant / team-isolated products
-- Auth, permission, and system architecture work
-- RAG / vector search applications (including image-vector scenarios)
-- Multimodal capabilities: ASR, TTS, vision-related APIs
-
-The through-line: embed AI in real platforms; keep tenancy, auth, and architecture first-class. See [Voice Agent Platform](/en/projects/voice-agent-platform).
-
----
-
-## Engineering Philosophy
-
-**Production over demos.** Prefer systems you can operate, harden, and evolve.
-
-**Understand the architecture, not only the framework.** Retrieval, inference, sessions, tenancy, and failure paths need a clear model.
-
-**Combine AI with reliable software engineering.** Auth, permissions, multi-tenant design, and system architecture are part of the product.
-
-**Document what you learn.** This knowledge base keeps judgments, trade-offs, and open questions revisable.
-
----
-
-## Current Learning
-
-- Agents: from single-turn assistants to multi-step, tool-using workflows
-- Speech-session latency, graceful degradation, and observability
-- RAG, multimodal pipelines, and SaaS-oriented AI platform concerns
-
-Chinese is the default locale; English is for cross-check and external readers.
+Still improving: contract checks, session baselines (first audio / barge-in / tool failure), and where multi-step agents fit in real products.

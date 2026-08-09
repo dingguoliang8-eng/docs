@@ -1,63 +1,33 @@
 ---
 title: "Ding Guoliang · AI 工程"
 sidebarTitle: "简介"
-description: "Ding Guoliang 的 AI 工程知识库与技术招牌：闭环项目 + Agent/RAG/多模态深潜。"
+description: "Ding Guoliang 技术招牌：端侧语音 Agent 智控闭环与工程笔记。"
 ---
 
-我是 **Ding Guoliang**。这里是个人 AI 工程知识库，也是一份面向招聘与同行的技术招牌：一边沉淀主题深潜（Agent、RAG、多模态、基础设施），一边用脱敏案例说明我如何把能力做成**可上线的闭环产品**。
+我是 **Ding Guoliang**。这个站点是技术招牌，不是教程全集。
 
-近半年主线是一套 **端侧语音 Agent 智控平台**——管理台、业务/配置后端与设备侧语音服务打通，功能基本闭环并进入上线。站点里的判断与笔记，尽量从这类真实约束里长出来。
-
-<Note>
-  文档会持续更新。案例已脱敏：不出现公司名、产品名与内部细节。
-</Note>
+近半年主线是一套 **端侧语音 Agent 智控平台**：智控台运营设备与智能体，设备侧跑实时语音会话，两边靠配置连成闭环。功能已基本打通，进入上线。案例已脱敏。
 
 ---
 
-## 怎么读这个站
-
-<Steps>
-  <Step title="先看人与项目">
-    从 [关于我](/about) 和 [智控与语音 Agent](/projects/voice-agent-platform) 建立印象：我是谁、闭环长什么样。
-  </Step>
-  <Step title="再看主题深潜">
-    **作品集** Tab 讲架构与取舍：Agents、RAG、基础设施、多模态。
-  </Step>
-  <Step title="对照笔记">
-    **项目与笔记**里是落地教训与速查，用来对照抽象章节。
-  </Step>
-</Steps>
-
----
-
-## 工程原则
-
-**1. 先按生产标准想。** 延迟、成本、失败方式、可观测性优先于 Demo 好看。
-
-**2. 做成可拆可换的结构。** 检索与生成、会话与工具、控制面与数据面尽量解耦。
-
-**3. 可观测性从第一天就要。** 看不见的链路改不动，只能重启。
-
-**4. 靠度量小步迭代。** 先有基线，再改提示词、分块、检索或模型选型。
-
----
-
-## 从这里开始
+## 从这里看
 
 <CardGroup cols={2}>
   <Card title="智控与语音 Agent" icon="microchip" href="/projects/voice-agent-platform">
-    脱敏代表项目：管理台 \+ API \+ 设备侧语音闭环。
+    一天怎么用、一次对话怎么走、三层地图与深挖点。
   </Card>
 
   <Card title="关于我" icon="user" href="/about">
-    路径、焦点与工程理念。
+    路径与全链路工作范围。
   </Card>
 
-  <Card title="AI Agents" icon="robot" href="/agents/overview">
-    Agent 工作流、工具调用与编排。
+  <Card title="配置与控制面" icon="sliders" href="/notes/config-control-plane">
+    下发、本地调试与契约。
   </Card>
 
-  <Card title="多模态 AI" icon="waveform-lines" href="/multimodal/overview">
-    ASR、TTS 与视觉—语言。
+  <Card title="会话与打断" icon="waveform-lines" href="/notes/voice-session-interrupt">
+    双路径、幽灵播报与线程边界。
   </Card>
 </CardGroup>
+
+工程上更在意：能运营、能打断、失败时还能降级。细节在项目和笔记里。

@@ -1,44 +1,12 @@
 ---
 title: "Ding Guoliang · AI Engineering"
 sidebarTitle: "Introduction"
-description: "Ding Guoliang's AI engineering brand site: closed-loop project plus agents, RAG, multimodal deep-dives."
+description: "Ding Guoliang technical brand: edge voice-agent control platform and engineering notes."
 ---
 
-I am **Ding Guoliang**. This site is a personal AI engineering knowledge base and a technical brand for profiles and hiring: thematic deep-dives (agents, RAG, multimodal, infrastructure) plus a desensitized case study of shipping a **closed-loop production system**.
+I am **Ding Guoliang**. This site is a technical brand page, not a tutorial library.
 
-The past half year centered on an **edge voice-agent control platform** — admin console, business/config API, and on-device speech service — now functionally closed and entering launch. Judgments on this site aim to grow from those constraints.
-
-<Note>
-  Living document. Case studies are desensitized: no company names, product brands, or internal details.
-</Note>
-
----
-
-## How to read this site
-
-<Steps>
-  <Step title="Start with person and project">
-    Read [About Me](/en/about) and [Voice Agent Platform](/en/projects/voice-agent-platform) first.
-  </Step>
-  <Step title="Then thematic deep-dives">
-    The **Portfolio** tab covers agents, RAG, infrastructure, and multimodal design.
-  </Step>
-  <Step title="Cross-check notes">
-    **Projects & Notes** holds lessons and quick references from real delivery.
-  </Step>
-</Steps>
-
----
-
-## Engineering principles
-
-**1. Production first.** Latency, cost, failure modes, and observability beat demo polish.
-
-**2. Composable structure.** Keep retrieval/generation, session/tools, and control/data planes separable.
-
-**3. Observability from day one.** You cannot improve what you cannot see.
-
-**4. Measure, then iterate.** Baselines before prompt, chunking, retrieval, or model changes.
+The past half year centered on an **edge voice-agent control platform**: a control console for devices and agents, plus an on-device realtime speech service, joined by a shared config contract. Functionally closed and entering launch. Desensitized.
 
 ---
 
@@ -46,18 +14,20 @@ The past half year centered on an **edge voice-agent control platform** — admi
 
 <CardGroup cols={2}>
   <Card title="Voice Agent Platform" icon="microchip" href="/en/projects/voice-agent-platform">
-    Flagship desensitized case: console \+ API \+ on-device speech loop.
+    Flagship case: day-in-the-life, session walkthrough, depth anchors.
   </Card>
 
   <Card title="About Me" icon="user" href="/en/about">
-    Path, focus, and philosophy.
+    Path and full-stack scope.
   </Card>
 
-  <Card title="AI Agents" icon="robot" href="/en/agents/overview">
-    Workflows, tool use, and orchestration.
+  <Card title="Lessons Learned" icon="lightbulb" href="/en/notes/lessons-learned">
+    Short retros from shipping.
   </Card>
 
-  <Card title="Multimodal AI" icon="waveform-lines" href="/en/multimodal/overview">
-    ASR, TTS, and vision-language.
+  <Card title="Projects Overview" icon="folder" href="/en/projects/overview">
+    Stack and notes entry.
   </Card>
 </CardGroup>
+
+I care about systems that can be operated, interrupted cleanly, and degraded safely.

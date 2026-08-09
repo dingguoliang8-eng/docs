@@ -4,7 +4,7 @@ sidebarTitle: "概览"
 description: "项目区入口：脱敏代表项目与真实技术栈。"
 ---
 
-本区记录**可对外讲述的落地案例**与工程笔记。头牌是脱敏后的端侧语音 Agent 智控平台；主题深潜（Agents / RAG / 多模态 / 基础设施）在「作品集」Tab。
+本区是对外可讲的落地案例与工程笔记。当前头牌是脱敏后的端侧语音 Agent 智控平台。
 
 ---
 
@@ -20,7 +20,7 @@ description: "项目区入口：脱敏代表项目与真实技术栈。"
 
 <CardGroup cols={2}>
   <Card title="智控台前端" icon="desktop">
-    **Vue** 管理台，多环境 API，权限相关交互。
+    **Vue** 管理台，多区域业务 API，权限相关交互。
   </Card>
 
   <Card title="智控台后端" icon="server">
@@ -32,26 +32,28 @@ description: "项目区入口：脱敏代表项目与真实技术栈。"
   </Card>
 
   <Card title="检索与多模态" icon="database">
-    向量检索（如 **Qdrant**）、Embedding 服务；ASR/TTS、视觉相关能力。
+    向量/外部知识引擎（适配接入）；ASR/TTS、视觉相关能力。
   </Card>
 </CardGroup>
-
-抽象模式与原理仍在知识库章节，不在此重复虚构「独立三件套产品」。
 
 ---
 
 ## 工程笔记
 
 <CardGroup cols={2}>
+  <Card title="配置与控制面" icon="sliders" href="/notes/config-control-plane">
+    双模式、按设备配置、契约。
+  </Card>
+
+  <Card title="会话与打断" icon="waveform-lines" href="/notes/voice-session-interrupt">
+    走读、双路径、打断一致性。
+  </Card>
+
   <Card title="经验总结" icon="lightbulb" href="/notes/lessons-learned">
-    配置双模式、会话延迟、权限分层等上线教训。
+    跨主题短复盘。
   </Card>
 
   <Card title="LLM 常见坑" icon="triangle-exclamation" href="/notes/llm-gotchas">
-    提示注入、幻觉、上下文与限流等。
-  </Card>
-
-  <Card title="性能技巧" icon="gauge-high" href="/notes/performance-tips">
-    延迟与吞吐相关实践。
+    提示注入、幻觉、限流等。
   </Card>
 </CardGroup>
